@@ -140,9 +140,19 @@ const ExpensesTab = () => {
                 <TouchableOpacity
                   style={[styles.selectItem, { marginRight: 8 }]}
                   onPress={() => {
-                    const today = new Date().toISOString().split('T')[0];
-                    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                    setDateRange({ start: weekAgo, end: today });
+                    // Get today at midnight for consistent date handling
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    
+                    // Calculate 7 days ago
+                    const weekAgo = new Date(today);
+                    weekAgo.setDate(today.getDate() - 7);
+                    
+                    // Format dates as YYYY-MM-DD
+                    const todayStr = today.toISOString().split('T')[0];
+                    const weekAgoStr = weekAgo.toISOString().split('T')[0];
+                    
+                    setDateRange({ start: weekAgoStr, end: todayStr });
                   }}
                 >
                   <Text style={styles.selectItemText}>Last 7 days</Text>
@@ -150,9 +160,19 @@ const ExpensesTab = () => {
                 <TouchableOpacity
                   style={[styles.selectItem, { marginRight: 8 }]}
                   onPress={() => {
-                    const today = new Date().toISOString().split('T')[0];
-                    const monthAgo = new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0];
-                    setDateRange({ start: monthAgo, end: today });
+                    // Get today at midnight for consistent date handling
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    
+                    // Calculate 30 days ago
+                    const monthAgo = new Date(today);
+                    monthAgo.setDate(today.getDate() - 30);
+                    
+                    // Format dates as YYYY-MM-DD
+                    const todayStr = today.toISOString().split('T')[0];
+                    const monthAgoStr = monthAgo.toISOString().split('T')[0];
+                    
+                    setDateRange({ start: monthAgoStr, end: todayStr });
                   }}
                 >
                   <Text style={styles.selectItemText}>Last 30 days</Text>
@@ -160,9 +180,35 @@ const ExpensesTab = () => {
                 <TouchableOpacity
                   style={[styles.selectItem, { marginRight: 8 }]}
                   onPress={() => {
-                    const today = new Date().toISOString().split('T')[0];
-                    const yearAgo = new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0];
-                    setDateRange({ start: yearAgo, end: today });
+                    // Get today at midnight for consistent date handling
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    
+                    // Calculate 1 year ago
+                    const yearAgo = new Date(today);
+                    yearAgo.setFullYear(today.getFullYear() - 1);
+                    
+                    // Format dates as YYYY-MM-DD
+                    const todayStr = today.toISOString().split('T')[0];
+                    const yearAgoStr = yearAgo.toISOString().split('T')[0];
+                    
+                    setDateRange({ start: yearAgoStr, end: todayStr });
+                  }}
+                >
+                  <Text style={styles.selectItemText}>Last Year</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.selectItem, { marginRight: 8 }]}
+                  onPress={() => {
+                    // Get oldest possible date (for "All Time")
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const todayStr = today.toISOString().split('T')[0];
+                    
+                    // Use a very old date for "All Time"
+                    const oldDate = "2000-01-01";
+                    
+                    setDateRange({ start: oldDate, end: todayStr });
                   }}
                 >
                   <Text style={styles.selectItemText}>All Time</Text>
@@ -188,13 +234,28 @@ const ExpensesTab = () => {
               value={newExpense.amount.toString()}
               onChangeText={(text) => setNewExpense({ ...newExpense, amount: Number(text) })}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Paid By"
-              placeholderTextColor={colors.textPlaceholder}
-              value={newExpense.paidBy}
-              onChangeText={(text) => setNewExpense({ ...newExpense, paidBy: text })}
-            />
+            <Text style={styles.label}>Paid By:</Text>
+            <View style={styles.selectContainer}>
+              {roommates.map((mate) => (
+                <TouchableOpacity
+                  key={mate}
+                  style={[
+                    styles.selectItem,
+                    newExpense.paidBy === mate && styles.selectedItem,
+                  ]}
+                  onPress={() => setNewExpense({ ...newExpense, paidBy: mate })}
+                >
+                  <Text
+                    style={[
+                      styles.selectItemText,
+                      newExpense.paidBy === mate && styles.selectedItemText,
+                    ]}
+                  >
+                    {mate}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <Text style={styles.label}>Split With:</Text>
             <View style={styles.selectContainer}>
               {roommates.map((mate) => (
@@ -272,4 +333,4 @@ const ExpensesTab = () => {
   );
 };
 
-export default ExpensesTab; 
+export default ExpensesTab;

@@ -1,27 +1,27 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { View, Text } from 'react-native';
 import {
-  ScrollView,
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  FlatList,
   Alert,
   SafeAreaView,
   ActivityIndicator,
   Modal,
-  Pressable,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppStateProvider, useAppState } from './AppStateProvider';
+import { AuthProvider, useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
 import ExpensesTab from './ExpensesTab';
 import RoommatesTab from './RoommatesTab';
 import SummaryTab from './SummaryTab';
 import SettlementsTab from './SettlementsTab';
 import StatisticsTab from './StatisticsTab';
+import SettingsTab from './SettingsTab';
+import { AuthContainer } from './AuthScreens';
+import UserProfile from './UserProfile';
 
 // Define our interfaces
 interface Expense {
@@ -71,16 +71,56 @@ const DEFAULT_CATEGORIES = [
 // Main App component
 export default function App() {
   return (
-    <AppStateProvider>
-      <MainAppContent />
-    </AppStateProvider>
+    <AuthProvider>
+      <AppStateProvider>
+        <AppWithAuth />
+      </AppStateProvider>
+    </AuthProvider>
   );
+}
+
+// Wrapper component that handles auth state
+function AppWithAuth() {
+  const { user, isLoading: authLoading } = useAuth();
+  const { colors } = useTheme();
+  
+  // Create styles for this component
+  const authStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    loadingText: {
+      color: colors.text,
+      marginTop: 16
+    }
+  });
+  
+  if (authLoading) {
+    return (
+      <View style={authStyles.container}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={authStyles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+  
+  // If no user is logged in, show auth screens
+  if (!user) {
+    return <AuthContainer />;
+  }
+  
+  // If user is logged in, show main app content
+  return <MainAppContent />;
 }
 
 // Move the rest of your app logic into MainAppContent
 function MainAppContent() {
   // Use our centralized theme hook
   const { isDarkMode, colors } = useTheme();
+  const { user, logout } = useAuth();
   // State variables (from context)
   const {
     activeTab, setActiveTab, showDatePicker, setShowDatePicker, expenses, setExpenses, newExpense, setNewExpense,
@@ -93,6 +133,7 @@ function MainAppContent() {
 
   // Local state for date input
   const [tempDateInput, setTempDateInput] = useState('');
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Base background style
   const backgroundStyle = {
@@ -108,10 +149,14 @@ function MainAppContent() {
     },
     header: {
       padding: 16,
-      alignItems: 'center',
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
       backgroundColor: colors.surface,
+    },
+    headerContent: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
     },
     headerTitle: {
       fontSize: 26,
@@ -121,6 +166,35 @@ function MainAppContent() {
     headerSubtitle: {
       fontSize: 14,
       color: colors.textSecondary,
+    },
+    welcomeText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginTop: 4,
+      fontStyle: 'italic',
+    },
+    logoutButton: {
+      padding: 8,
+      backgroundColor: colors.buttonSecondary,
+      borderRadius: 6,
+    },
+    logoutText: {
+      color: colors.text,
+      fontWeight: '500',
+    },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    profileButton: {
+      padding: 8,
+      backgroundColor: colors.buttonSecondary,
+      borderRadius: 20,
+      marginRight: 8,
+    },
+    profileEmoji: {
+      fontSize: 18,
     },
     tabBar: {
       flexDirection: 'row',
@@ -515,12 +589,38 @@ function MainAppContent() {
   // Removed unused render functions since we now use separate tab components
 
   // Render the main app content
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Logout', onPress: async () => await logout(), style: 'destructive' }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={backgroundStyle}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Roommate Expense Tracker</Text>
-        <Text style={styles.headerSubtitle}>Track and manage shared expenses</Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.headerTitle}>Roommate Expense Tracker</Text>
+            <Text style={styles.headerSubtitle}>Track and manage shared expenses</Text>
+          </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={() => setShowProfileModal(true)} style={styles.profileButton}>
+              <Text style={styles.profileEmoji}>👤</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        {user && (
+          <Text style={styles.welcomeText}>Welcome, {user.displayName || user.email}</Text>
+        )}
       </View>
       <View style={styles.tabBar}>
         <TouchableOpacity
@@ -558,12 +658,31 @@ function MainAppContent() {
             Statistics
           </Text>
         </TouchableOpacity>
+        {null}
       </View>
       {activeTab === 'expenses' && <ExpensesTab />}
       {activeTab === 'roommates' && <RoommatesTab />}
       {activeTab === 'summary' && <SummaryTab />}
       {activeTab === 'settlements' && <SettlementsTab />}
       {activeTab === 'statistics' && <StatisticsTab />}
+      {null}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={showProfileModal}
+        onRequestClose={() => setShowProfileModal(false)}>
+        <SafeAreaView style={{flex:1, backgroundColor: colors.background}}>
+          <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding: 16, borderBottomWidth:1, borderBottomColor: colors.border, backgroundColor: colors.surface}}>
+            <Text style={{fontSize:18, fontWeight:'600', color: colors.text}}>Your Profile</Text>
+            <TouchableOpacity onPress={() => setShowProfileModal(false)} style={[styles.logoutButton, {paddingHorizontal:12}]}> 
+              <Text style={styles.logoutText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{flex:1}}>
+            <UserProfile />
+          </View>
+        </SafeAreaView>
+      </Modal>
       <Modal
         animationType="slide"
         transparent={true}
@@ -604,6 +723,22 @@ function MainAppContent() {
                 style={[styles.modalButton, styles.confirmButton]}
                 onPress={() => {
                   if (tempDateInput && tempDateInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    // Validate that the date is a valid date (not just matching the pattern)
+                    const dateObj = new Date(tempDateInput);
+                    if (isNaN(dateObj.getTime())) {
+                      Alert.alert('Invalid Date', 'Please enter a valid date');
+                      return;
+                    }
+                    
+                    // Validate date range (start date should be before or equal to end date)
+                    if (datePickerType === 'start' && new Date(tempDateInput) > new Date(dateRange.end)) {
+                      Alert.alert('Invalid Date Range', 'Start date cannot be after end date');
+                      return;
+                    } else if (datePickerType === 'end' && new Date(tempDateInput) < new Date(dateRange.start)) {
+                      Alert.alert('Invalid Date Range', 'End date cannot be before start date');
+                      return;
+                    }
+                    
                     updateDateRange(tempDateInput);
                     setShowDatePicker(false);
                     setTempDateInput('');

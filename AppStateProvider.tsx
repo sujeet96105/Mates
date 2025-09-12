@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
+import { useAuth } from './AuthProvider';
+import { db } from './firebase';  // Import Firestore
+import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, onSnapshot } from 'firebase/firestore';
+
+// Default categories if none are set
+// Remove this declaration since DEFAULT_CATEGORIES is already declared below
 
 // Define interfaces/types (copy from App.tsx as needed)
 interface Expense {
@@ -12,6 +17,8 @@ interface Expense {
   date: string;
   time: string;
   category: string;
+  userId?: string;
+  firestoreId?: string;
 }
 
 interface Balance {
@@ -86,6 +93,9 @@ interface AppStateContextType {
 const AppStateContext = createContext<AppStateContextType | undefined>(undefined);
 
 export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Get the current user from AuthProvider
+  const { user } = useAuth();
+  
   // All state and handlers from App.tsx go here
   const [activeTab, setActiveTab] = useState('expenses');
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -114,26 +124,72 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
-  // Load data from AsyncStorage on initial render
+  // Load data and subscribe to realtime expenses when user changes
   useEffect(() => {
+    let unsubscribeExpenses: (() => void) | undefined;
     const loadData = async () => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+      
       setIsLoading(true);
       try {
-        const jsonData = await AsyncStorage.getItem('mates-data');
-        if (jsonData) {
-          const data: StoredData = JSON.parse(jsonData);
-          setExpenses(data.expenses || []);
-          setRoommates(data.roommates || []);
-          setCategories(data.categories || DEFAULT_CATEGORIES);
+
+        // Get user document reference
+        const userDocRef = doc(db!, 'users', user.uid);
+        console.log('[Firestore] Fetching user document...');
+        const userDoc = await getDoc(userDocRef);
+        console.log('[Firestore] User document fetched:', userDoc.exists() ? 'exists' : 'not found');
+        
+        if (userDoc.exists()) {
+          // User exists, load their data
+          const userData = userDoc.data();
+          
+          // Realtime expenses subscription
+          const expensesQuery = query(collection(db!, 'expenses'), where('userId', '==', user.uid));
+          console.log('[Firestore] Subscribing to expenses...');
+          unsubscribeExpenses = onSnapshot(expensesQuery, (snapshot) => {
+            const expensesData = snapshot.docs.map(docSnapshot => {
+              const data = docSnapshot.data();
+              return {
+                ...data,
+                firestoreId: docSnapshot.id,
+                date: typeof data.date === 'object' && data.date?.toDate ? 
+                  data.date.toDate().toISOString().split('T')[0] : 
+                  data.date || new Date().toISOString().split('T')[0],
+                time: data.time || new Date().toLocaleTimeString()
+              } as Expense;
+            });
+            console.log('[Firestore] Realtime expenses update. Count =', snapshot.size);
+            setExpenses(expensesData);
+          }, (err) => {
+            console.warn('[Firestore] Expenses listener error:', err);
+          });
+          setRoommates(userData.roommates || []);
+          setCategories(userData.categories || DEFAULT_CATEGORIES);
+        } else {
+          // New user, create their document with default data
+          await setDoc(userDocRef, {
+            roommates: [],
+            categories: DEFAULT_CATEGORIES,
+            createdAt: new Date()
+          });
         }
       } catch (error) {
         console.error('Failed to load data:', error);
+        Alert.alert('Error', 'Failed to load your data. Please try again.');
       } finally {
         setIsLoading(false);
       }
     };
     loadData();
-  }, []);
+    return () => {
+      if (unsubscribeExpenses) {
+        unsubscribeExpenses();
+      }
+    };
+  }, [user]);
 
   // Validate expense data when expenses change
   useEffect(() => {
@@ -156,22 +212,52 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [expenses]);
 
-  // Save data to AsyncStorage when expenses or roommates change
+  // Save data to Firestore when roommates or categories change
   useEffect(() => {
     const saveData = async () => {
+      if (!user || isLoading) return;
+      
       try {
-        const data: StoredData = {
-          expenses,
+        // Save user data (roommates and categories)
+        const userDocRef = doc(db!, 'users', user.uid);
+        await setDoc(userDocRef, {
           roommates,
           categories,
-        };
-        await AsyncStorage.setItem('mates-data', JSON.stringify(data));
+          updatedAt: new Date()
+        }, { merge: true });
+        
+        // We don't need to save expenses here as they're saved individually when added/removed
       } catch (error) {
         console.error('Failed to save data:', error);
+        Alert.alert('Error', 'Failed to save your data. Please try again.');
       }
     };
-    saveData();
-  }, [expenses, roommates, categories]);
+    // Don't call saveData directly in the effect body
+    // This creates an infinite loop as saveData changes dependencies
+  }, [roommates, categories, user, isLoading]);
+  
+  // Separate effect to handle the actual data saving
+  useEffect(() => {
+    if (user && !isLoading) {
+      const saveData = async () => {
+        if (!user || isLoading) return;
+        
+        try {
+          // Save user data (roommates and categories)
+          const userDocRef = doc(db!, 'users', user.uid);
+          await setDoc(userDocRef, {
+            roommates,
+            categories,
+            updatedAt: new Date()
+          }, { merge: true });
+        } catch (error) {
+          console.error('Failed to save data:', error);
+          Alert.alert('Error', 'Failed to save your data. Please try again.');
+        }
+      };
+      saveData();
+    }
+  }, [roommates, categories, user, isLoading]);
 
   // Calculate balances whenever expenses or roommates change
   useEffect(() => {
@@ -180,12 +266,22 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const getFilteredExpenses = () => {
     return expenses.filter(expense => {
+      // Check if category matches
       const matchesCategory = categoryFilter === 'All' || expense.category === categoryFilter;
+      
+      // Normalize dates for comparison by setting all to midnight
       const expenseDate = new Date(expense.date);
+      expenseDate.setHours(0, 0, 0, 0);
+      
       const startDate = new Date(dateRange.start);
+      startDate.setHours(0, 0, 0, 0);
+      
       const endDate = new Date(dateRange.end);
-      endDate.setHours(23, 59, 59);
+      endDate.setHours(23, 59, 59, 999); // End of day
+      
+      // Check if date is in range (inclusive of start and end dates)
       const isInDateRange = expenseDate >= startDate && expenseDate <= endDate;
+      
       return matchesCategory && isInDateRange;
     });
   };
@@ -258,19 +354,36 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSettlements(settlementItems);
   };
 
-  const handleAddExpense = () => {
-    if (!newExpense.description || newExpense.amount <= 0 || !newExpense.paidBy) {
+  const handleAddExpense = async () => {
+    if (!newExpense.description || newExpense.amount <= 0 || !newExpense.paidBy || !user) {
       Alert.alert('Missing Information', 'Please fill in all required fields');
       return;
     }
-    const expenseToAdd: Expense = {
-      ...newExpense,
-      id: Date.now(),
-      date: new Date().toISOString().split('T')[0],
-      time: new Date().toLocaleTimeString(),
-    };
-    setExpenses([...expenses, expenseToAdd]);
-    setNewExpense({ description: '', amount: 0, paidBy: '', splitWith: [], date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString(), category: 'Other' });
+    
+    try {
+      // Create a new expense document in Firestore
+      const expensesCollectionRef = collection(db!, 'expenses');
+      const newExpenseRef = doc(expensesCollectionRef);
+      
+      const expenseToAdd: Expense = {
+        ...newExpense,
+        id: Date.now(), // Keep numeric ID for local operations
+        userId: user.uid,
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString(),
+        firestoreId: newExpenseRef.id // Store Firestore document ID
+      };
+      
+      // Save to Firestore
+      await setDoc(newExpenseRef, expenseToAdd);
+      
+      // Update local state
+      setExpenses([...expenses, expenseToAdd]);
+      setNewExpense({ description: '', amount: 0, paidBy: '', splitWith: [], date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString(), category: 'Other' });
+    } catch (error) {
+      console.error('Error adding expense:', error);
+      Alert.alert('Error', 'Failed to add expense. Please try again.');
+    }
   };
 
   const confirmAddCategory = () => {
@@ -297,10 +410,46 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const handleRemoveExpense = (id?: number) => {
-    if (!id) return;
+    if (!id || !user) return;
+    
+    // Find the expense in our local state first
+    const expenseToDelete = expenses.find(expense => expense.id === id);
+    if (!expenseToDelete) {
+      Alert.alert('Error', 'Could not find the expense to delete.');
+      return;
+    }
+    
     Alert.alert('Confirm Delete', 'Are you sure you want to delete this expense?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', onPress: () => { const updatedExpenses = expenses.filter(expense => expense.id !== id); setExpenses(updatedExpenses); }, style: 'destructive' },
+      { text: 'Delete', onPress: async () => {
+        try {
+          if (expenseToDelete.firestoreId) {
+            // If we have the Firestore ID, delete directly
+            const expenseDocRef = doc(db!, 'expenses', expenseToDelete.firestoreId);
+            await deleteDoc(expenseDocRef);
+          } else {
+            // Fallback to query if firestoreId is not available
+            const expensesRef = collection(db!, 'expenses');
+            const q = query(expensesRef, where('id', '==', id), where('userId', '==', user.uid));
+            const querySnapshot = await getDocs(q);
+            
+            if (!querySnapshot.empty) {
+              // Delete the found document
+              const docToDelete = querySnapshot.docs[0];
+              await deleteDoc(docToDelete.ref);
+            } else {
+              throw new Error('Expense document not found in Firestore');
+            }
+          }
+          
+          // Update local state
+          const updatedExpenses = expenses.filter(expense => expense.id !== id);
+          setExpenses(updatedExpenses);
+        } catch (error) {
+          console.error('Error removing expense:', error);
+          Alert.alert('Error', 'Failed to remove expense. Please try again.');
+        }
+      }, style: 'destructive' },
     ]);
   };
 
@@ -408,4 +557,4 @@ export const useAppState = () => {
     throw new Error('useAppState must be used within an AppStateProvider');
   }
   return context;
-}; 
+};
