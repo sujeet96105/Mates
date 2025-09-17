@@ -10,12 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
+import MatesLogo from './MatesLogo';
 
 // Login Screen Component
-export const LoginScreen: React.FC = () => {
+export const LoginScreen: React.FC<{ onForgotPassword: () => void }> = ({ onForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, isLoading, error, setError } = useAuth();
@@ -36,8 +38,10 @@ export const LoginScreen: React.FC = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.formContainer}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.formContainer}>
+          <MatesLogo size={100} showText={true} />
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
 
@@ -74,20 +78,21 @@ export const LoginScreen: React.FC = () => {
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={isDarkMode ? colors.surface : '#FFFFFF'} />
             ) : (
               <Text style={styles.buttonText}>Sign In</Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setError(null)}
+            onPress={onForgotPassword}
             style={styles.linkButton}
           >
             <Text style={styles.linkText}>Forgot Password?</Text>
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </KeyboardAvoidingView>
   );
 };
@@ -122,8 +127,10 @@ export const RegisterScreen: React.FC = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.formContainer}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.formContainer}>
+          <MatesLogo size={100} showText={true} />
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Sign up to get started</Text>
 
@@ -183,13 +190,14 @@ export const RegisterScreen: React.FC = () => {
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={isDarkMode ? colors.surface : '#FFFFFF'} />
             ) : (
               <Text style={styles.buttonText}>Create Account</Text>
             )}
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </KeyboardAvoidingView>
   );
 };
@@ -214,7 +222,7 @@ export const ForgotPasswordScreen: React.FC<{ onBack: () => void }> = ({ onBack 
   const styles = createStyles(colors, isDarkMode);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.formContainer}>
         <Text style={styles.title}>Reset Password</Text>
         <Text style={styles.subtitle}>Enter your email to receive reset instructions</Text>
@@ -240,7 +248,7 @@ export const ForgotPasswordScreen: React.FC<{ onBack: () => void }> = ({ onBack 
           disabled={isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={isDarkMode ? colors.surface : '#FFFFFF'} />
           ) : (
             <Text style={styles.buttonText}>Reset Password</Text>
           )}
@@ -250,7 +258,7 @@ export const ForgotPasswordScreen: React.FC<{ onBack: () => void }> = ({ onBack 
           <Text style={styles.linkText}>Back to Login</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -262,22 +270,16 @@ export const AuthContainer: React.FC = () => {
   const styles = createStyles(colors, isDarkMode);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {activeScreen === 'login' && (
         <>
-          <LoginScreen />
+          <LoginScreen onForgotPassword={() => setActiveScreen('forgotPassword')} />
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => setActiveScreen('register')}>
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity 
-            style={styles.forgotPasswordButton}
-            onPress={() => setActiveScreen('forgotPassword')}
-          >
-            <Text style={styles.linkText}>Forgot Password?</Text>
-          </TouchableOpacity>
         </>
       )}
 
@@ -296,7 +298,7 @@ export const AuthContainer: React.FC = () => {
       {activeScreen === 'forgotPassword' && (
         <ForgotPasswordScreen onBack={() => setActiveScreen('login')} />
       )}
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -316,7 +318,7 @@ const createStyles = (colors: any, isDarkMode: boolean) =>
       borderRadius: 12,
       backgroundColor: colors.card,
       margin: 16,
-      shadowColor: '#000',
+      shadowColor: colors.shadow,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.1,
       shadowRadius: 4,
@@ -360,12 +362,12 @@ const createStyles = (colors: any, isDarkMode: boolean) =>
       marginTop: 16,
     },
     buttonText: {
-      color: '#FFFFFF',
+      color: isDarkMode ? '#FFFFFF' : '#333333',
       fontWeight: '600',
       fontSize: 16,
     },
     errorText: {
-      color: '#EF4444',
+      color: colors.error,
       marginBottom: 16,
       textAlign: 'center',
     },

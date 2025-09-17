@@ -44,7 +44,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const user = await loginUser(email, password);
       return user;
     } catch (error: any) {
-      const message = error.message || 'Failed to login';
+      // Map Firebase auth errors to friendly copy
+      const code: string | undefined = error?.code;
+      let message = error?.message || 'Failed to login';
+      if (
+        code === 'auth/invalid-credential' ||
+        code === 'auth/wrong-password' ||
+        code === 'auth/user-not-found' ||
+        code === 'auth/invalid-email'
+      ) {
+        message = 'Incorrect email or password';
+      }
       setError(message);
       if (message.toLowerCase().includes('verify your email')) {
         Alert.alert(
@@ -71,7 +81,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       return user;
     } catch (error: any) {
-      setError(error.message || 'Failed to register');
+      const code: string | undefined = error?.code;
+      let message = error?.message || 'Failed to register';
+      if (code === 'auth/email-already-in-use') {
+        message = 'This email is already in use';
+      } else if (code === 'auth/invalid-email') {
+        message = 'Please enter a valid email address';
+      } else if (code === 'auth/weak-password') {
+        message = 'Password is too weak';
+      }
+      setError(message);
       return null;
     } finally {
       setIsLoading(false);
@@ -102,7 +121,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       Alert.alert('Password Reset', 'Check your email for password reset instructions');
       return true;
     } catch (error: any) {
-      setError(error.message || 'Failed to reset password');
+      const code: string | undefined = error?.code;
+      let message = error?.message || 'Failed to reset password';
+      if (code === 'auth/user-not-found') {
+        message = 'No account found with this email';
+      } else if (code === 'auth/invalid-email') {
+        message = 'Please enter a valid email address';
+      }
+      setError(message);
       return false;
     } finally {
       setIsLoading(false);

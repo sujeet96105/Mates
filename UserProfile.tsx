@@ -47,8 +47,8 @@ const UserProfile: React.FC = () => {
         <Text style={[stylesBase.label, { color: colors.textSecondary }]}>Display Name:</Text>
         <TextInput
           style={[stylesBase.input, { 
-            borderColor: isDarkMode ? '#333' : '#ddd', 
-            backgroundColor: isDarkMode ? '#2A2A2A' : colors.card,
+            borderColor: colors.border, 
+            backgroundColor: colors.surface,
             color: colors.text
           }]}
           value={displayName}
@@ -58,7 +58,7 @@ const UserProfile: React.FC = () => {
         />
       </View>
 
-      {error && <Text style={[stylesBase.errorText, { color: '#EF4444' }]}>{error}</Text>}
+      {error && <Text style={[stylesBase.errorText, { color: colors.error }]}>{error}</Text>}
 
       <TouchableOpacity 
         style={[stylesBase.button, { backgroundColor: colors.primary }]} 
@@ -66,9 +66,9 @@ const UserProfile: React.FC = () => {
         disabled={isSubmitting}
       >
         {isSubmitting ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={isDarkMode ? colors.surface : '#FFFFFF'} />
         ) : (
-          <Text style={stylesBase.buttonText}>Update Profile</Text>
+          <Text style={[stylesBase.buttonText, { color: isDarkMode ? colors.surface : '#FFFFFF' }]}>Update Profile</Text>
         )}
       </TouchableOpacity>
     </View>
@@ -111,7 +111,6 @@ const stylesBase = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },

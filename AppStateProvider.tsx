@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { useAuth } from './AuthProvider';
 import { db } from './firebase';  // Import Firestore
 import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, onSnapshot } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Default categories if none are set
 // Remove this declaration since DEFAULT_CATEGORIES is already declared below
@@ -19,6 +20,7 @@ interface Expense {
   category: string;
   userId?: string;
   firestoreId?: string;
+  createdAt?: number;
 }
 
 interface Balance {
@@ -53,6 +55,7 @@ const DEFAULT_CATEGORIES = [
 interface AppStateContextType {
   activeTab: string;
   setActiveTab: React.Dispatch<React.SetStateAction<string>>;
+  handleTabChange: (tab: string) => void;
   expenses: Expense[];
   setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
   newExpense: Expense;
@@ -98,6 +101,16 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   
   // All state and handlers from App.tsx go here
   const [activeTab, setActiveTab] = useState('expenses');
+  
+  // Handle tab selection to redirect settlements and statistics to financialInsights
+  const handleTabChange = (tab: string) => {
+    // If user tries to access the old tabs, redirect to the new combined tab
+    if (tab === 'settlements' || tab === 'statistics') {
+      setActiveTab('financialInsights');
+    } else {
+      setActiveTab(tab);
+    }
+  };
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [newExpense, setNewExpense] = useState<Expense>({
     description: '',
@@ -127,6 +140,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Load data and subscribe to realtime expenses when user changes
   useEffect(() => {
     let unsubscribeExpenses: (() => void) | undefined;
+    let unsubscribeUserDoc: (() => void) | undefined;
     const loadData = async () => {
       if (!user) {
         setIsLoading(false);
@@ -135,6 +149,27 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       setIsLoading(true);
       try {
+        // Try local cache first for fast startup
+        let cachedRoommates: string[] | undefined;
+        let cachedCategories: string[] | undefined;
+        try {
+          const cacheKey = `mates:user:${user.uid}:profile`;
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed.roommates)) {
+              cachedRoommates = parsed.roommates;
+              setRoommates(parsed.roommates);
+            }
+            if (Array.isArray(parsed.categories)) {
+              cachedCategories = parsed.categories;
+              setCategories(parsed.categories);
+            }
+            console.log('[Cache] Loaded roommates/categories from AsyncStorage');
+          }
+        } catch (e) {
+          console.warn('[Cache] Failed to load from AsyncStorage', e);
+        }
 
         // Get user document reference
         const userDocRef = doc(db!, 'users', user.uid);
@@ -143,9 +178,37 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         console.log('[Firestore] User document fetched:', userDoc.exists() ? 'exists' : 'not found');
         
         if (userDoc.exists()) {
-          // User exists, load their data
+          // User exists, load their data and subscribe for realtime updates
           const userData = userDoc.data();
-          
+
+          // Subscribe to user document for roommates/categories realtime updates
+          const arraysEqual = (a?: any[], b?: any[]) => {
+            if (!a && !b) return true;
+            if (!a || !b) return false;
+            if (a.length !== b.length) return false;
+            for (let i = 0; i < a.length; i++) {
+              if (a[i] !== b[i]) return false;
+            }
+            return true;
+          };
+
+          unsubscribeUserDoc = onSnapshot(userDocRef, (docSnapshot) => {
+            const data = docSnapshot.data();
+            if (data) {
+              const nextRoommates = Array.isArray(data.roommates) ? data.roommates : undefined;
+              const nextCategories = Array.isArray(data.categories) ? data.categories : undefined;
+              if (nextRoommates && !arraysEqual(nextRoommates, roommates)) setRoommates(nextRoommates); 
+              if (nextCategories && !arraysEqual(nextCategories, categories)) setCategories(nextCategories);
+              // Cache locally
+              AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({
+                roommates: nextRoommates ?? [],
+                categories: nextCategories ?? DEFAULT_CATEGORIES,
+              })).catch(() => {});
+            }
+          }, (err) => {
+            console.warn('[Firestore] User doc listener error:', err);
+          });
+
           // Realtime expenses subscription
           const expensesQuery = query(collection(db!, 'expenses'), where('userId', '==', user.uid));
           console.log('[Firestore] Subscribing to expenses...');
@@ -158,7 +221,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 date: typeof data.date === 'object' && data.date?.toDate ? 
                   data.date.toDate().toISOString().split('T')[0] : 
                   data.date || new Date().toISOString().split('T')[0],
-                time: data.time || new Date().toLocaleTimeString()
+                time: data.time || new Date().toLocaleTimeString(),
+                createdAt: typeof data.createdAt === 'number' 
+                  ? data.createdAt 
+                  : (data.date ? new Date(`${data.date}T00:00:00`).getTime() : Date.now())
               } as Expense;
             });
             console.log('[Firestore] Realtime expenses update. Count =', snapshot.size);
@@ -166,8 +232,28 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }, (err) => {
             console.warn('[Firestore] Expenses listener error:', err);
           });
-          setRoommates(userData.roommates || []);
-          setCategories(userData.categories || DEFAULT_CATEGORIES);
+          // Initialize local state immediately as well (before first snapshot)
+          const initialRoommates = Array.isArray(userData.roommates) ? userData.roommates : [];
+          const initialCategories = Array.isArray(userData.categories) ? userData.categories : DEFAULT_CATEGORIES;
+          setRoommates(initialRoommates);
+          setCategories(initialCategories);
+          // Cache initial fetch
+          AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({
+            roommates: initialRoommates,
+            categories: initialCategories,
+          })).catch(() => {});
+
+          // Reconcile: if Firestore has empty roommates but cache has data, push cache to Firestore
+          if ((initialRoommates.length === 0) && cachedRoommates && cachedRoommates.length > 0) {
+            try {
+              console.log('[Sync] Firestore roommates empty; restoring from cache');
+              await setDoc(userDocRef, { roommates: cachedRoommates, updatedAt: new Date() }, { merge: true });
+              setRoommates(cachedRoommates);
+              await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: cachedRoommates, categories: initialCategories.length ? initialCategories : (cachedCategories ?? DEFAULT_CATEGORIES) }));
+            } catch (e) {
+              console.warn('[Sync] Failed to restore roommates from cache', e);
+            }
+          }
         } else {
           // New user, create their document with default data
           await setDoc(userDocRef, {
@@ -175,6 +261,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             categories: DEFAULT_CATEGORIES,
             createdAt: new Date()
           });
+          AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: [], categories: DEFAULT_CATEGORIES })).catch(() => {});
         }
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -187,6 +274,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => {
       if (unsubscribeExpenses) {
         unsubscribeExpenses();
+      }
+      if (unsubscribeUserDoc) {
+        unsubscribeUserDoc();
       }
     };
   }, [user]);
@@ -212,52 +302,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [expenses]);
 
-  // Save data to Firestore when roommates or categories change
-  useEffect(() => {
-    const saveData = async () => {
-      if (!user || isLoading) return;
-      
-      try {
-        // Save user data (roommates and categories)
-        const userDocRef = doc(db!, 'users', user.uid);
-        await setDoc(userDocRef, {
-          roommates,
-          categories,
-          updatedAt: new Date()
-        }, { merge: true });
-        
-        // We don't need to save expenses here as they're saved individually when added/removed
-      } catch (error) {
-        console.error('Failed to save data:', error);
-        Alert.alert('Error', 'Failed to save your data. Please try again.');
-      }
-    };
-    // Don't call saveData directly in the effect body
-    // This creates an infinite loop as saveData changes dependencies
-  }, [roommates, categories, user, isLoading]);
-  
-  // Separate effect to handle the actual data saving
-  useEffect(() => {
-    if (user && !isLoading) {
-      const saveData = async () => {
-        if (!user || isLoading) return;
-        
-        try {
-          // Save user data (roommates and categories)
-          const userDocRef = doc(db!, 'users', user.uid);
-          await setDoc(userDocRef, {
-            roommates,
-            categories,
-            updatedAt: new Date()
-          }, { merge: true });
-        } catch (error) {
-          console.error('Failed to save data:', error);
-          Alert.alert('Error', 'Failed to save your data. Please try again.');
-        }
-      };
-      saveData();
-    }
-  }, [roommates, categories, user, isLoading]);
+  // Removed auto-save effect to avoid feedback loops with onSnapshot updates.
+  // Saving to Firestore is handled explicitly in action handlers (e.g., handleAddRoommate, confirmAddCategory).
 
   // Calculate balances whenever expenses or roommates change
   useEffect(() => {
@@ -371,7 +417,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         userId: user.uid,
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString(),
-        firestoreId: newExpenseRef.id // Store Firestore document ID
+        firestoreId: newExpenseRef.id, // Store Firestore document ID
+        createdAt: Date.now()
       };
       
       // Save to Firestore
@@ -396,7 +443,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const handleAddRoommate = () => {
+  const handleAddRoommate = async () => {
     if (!newRoommate.trim()) {
       Alert.alert('Missing Information', 'Please enter a roommate name');
       return;
@@ -405,8 +452,18 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       Alert.alert('Duplicate Roommate', 'This roommate already exists');
       return;
     }
-    setRoommates([...roommates, newRoommate.trim()]);
+    const updatedRoommates = [...roommates, newRoommate.trim()];
+    setRoommates(updatedRoommates);
     setNewRoommate('');
+    try {
+      if (user) {
+        const userDocRef = doc(db!, 'users', user.uid);
+        await setDoc(userDocRef, { roommates: updatedRoommates, updatedAt: new Date() }, { merge: true });
+        await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: updatedRoommates, categories }));
+      }
+    } catch (error) {
+      console.warn('Failed to persist roommate add:', error);
+    }
   };
 
   const handleRemoveExpense = (id?: number) => {
@@ -456,7 +513,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const handleRemoveRoommate = (mate: string) => {
     Alert.alert('Confirm Delete', 'Are you sure you want to remove this roommate? This will affect expense calculations.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', onPress: () => { const updatedRoommates = roommates.filter(roommate => roommate !== mate); setRoommates(updatedRoommates); }, style: 'destructive' },
+      { text: 'Remove', onPress: async () => { const updatedRoommates = roommates.filter(roommate => roommate !== mate); setRoommates(updatedRoommates); try { if (user) { const userDocRef = doc(db!, 'users', user.uid); await setDoc(userDocRef, { roommates: updatedRoommates, updatedAt: new Date() }, { merge: true }); await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: updatedRoommates, categories })); } } catch (error) { console.warn('Failed to persist roommate removal:', error); } }, style: 'destructive' },
     ]);
   };
 
@@ -509,6 +566,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       value={{
         activeTab,
         setActiveTab,
+        handleTabChange,
         expenses,
         setExpenses,
         newExpense,

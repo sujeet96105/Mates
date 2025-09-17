@@ -26,15 +26,15 @@ const ExpensesTab = () => {
 
   const styles = StyleSheet.create({
     tabContent: { padding: 16, flex: 1 },
-    filterContainer: { marginBottom: 16, backgroundColor: isDarkMode ? colors.surface : colors.background, padding: 12, borderRadius: 8 },
+    filterContainer: { marginBottom: 16, backgroundColor: isDarkMode ? colors.card : colors.surface, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
     filterTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 8 },
     label: { fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 8 },
-    selectItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8, backgroundColor: colors.buttonSecondary, minWidth: 80, alignItems: 'center', margin: 4 },
+    selectItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8, backgroundColor: isDarkMode ? colors.surface : colors.buttonSecondary, minWidth: 80, alignItems: 'center', margin: 4 },
     selectedItem: { backgroundColor: colors.primary, borderColor: colors.primary },
-    selectItemText: { color: colors.textSecondary },
-    selectedItemText: { color: '#FFFFFF', fontWeight: '500' },
+    selectItemText: { color: colors.text },
+    selectedItemText: { color: isDarkMode ? colors.text : '#FFFFFF', fontWeight: '500' },
     dateRangeContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-    dateButton: { flex: 1, padding: 10, backgroundColor: colors.buttonSecondary, borderRadius: 6, margin: 2, alignItems: 'center' },
+    dateButton: { flex: 1, padding: 10, backgroundColor: isDarkMode ? colors.surface : colors.buttonSecondary, borderRadius: 6, margin: 2, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
     dateButtonText: { color: colors.text },
     card: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
     cardTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 12 },
@@ -59,7 +59,7 @@ const ExpensesTab = () => {
   if (isLoading) {
     return (
       <View style={[styles.tabContent, { flex: 1, justifyContent: 'center', alignItems: 'center' }] }>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={{ color: colors.text, marginTop: 16 }}>
           Loading your data...
         </Text>
@@ -70,7 +70,17 @@ const ExpensesTab = () => {
   return (
     <FlatList
       style={styles.tabContent}
-      data={getFilteredExpenses()}
+      data={getFilteredExpenses().sort((a, b) => {
+        const aCreated = (a as any).createdAt as number | undefined;
+        const bCreated = (b as any).createdAt as number | undefined;
+        if (typeof aCreated === 'number' && typeof bCreated === 'number') {
+          return bCreated - aCreated; // Newest first
+        }
+        // Fallback to date+time comparison
+        const dateA = new Date(a.date + ' ' + a.time).getTime();
+        const dateB = new Date(b.date + ' ' + b.time).getTime();
+        return dateB - dateA;
+      })}
       keyExtractor={(item) => item.id?.toString() ?? Math.random().toString()}
       ListHeaderComponent={
         <>
@@ -258,6 +268,29 @@ const ExpensesTab = () => {
             </View>
             <Text style={styles.label}>Split With:</Text>
             <View style={styles.selectContainer}>
+              {/* Select All toggle */}
+              <TouchableOpacity
+                style={[
+                  styles.selectItem,
+                  roommates.length > 0 && roommates.every((m) => newExpense.splitWith.includes(m)) && styles.selectedItem,
+                ]}
+                onPress={() => {
+                  const allSelected = roommates.length > 0 && roommates.every((m) => newExpense.splitWith.includes(m));
+                  setNewExpense({
+                    ...newExpense,
+                    splitWith: allSelected ? [] : [...roommates],
+                  });
+                }}
+              >
+                <Text
+                  style={[
+                    styles.selectItemText,
+                    roommates.length > 0 && roommates.every((m) => newExpense.splitWith.includes(m)) && styles.selectedItemText,
+                  ]}
+                >
+                  Select All
+                </Text>
+              </TouchableOpacity>
               {roommates.map((mate) => (
                 <TouchableOpacity
                   key={mate}

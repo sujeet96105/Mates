@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text } from 'react-native';
 import {
   StatusBar,
@@ -10,6 +10,8 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Modal,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { AppStateProvider, useAppState } from './AppStateProvider';
 import { AuthProvider, useAuth } from './AuthProvider';
@@ -17,8 +19,7 @@ import { useTheme } from './useTheme';
 import ExpensesTab from './ExpensesTab';
 import RoommatesTab from './RoommatesTab';
 import SummaryTab from './SummaryTab';
-import SettlementsTab from './SettlementsTab';
-import StatisticsTab from './StatisticsTab';
+import FinancialInsightsTab from './FinancialInsightsTab';
 import SettingsTab from './SettingsTab';
 import { AuthContainer } from './AuthScreens';
 import UserProfile from './UserProfile';
@@ -123,7 +124,7 @@ function MainAppContent() {
   const { user, logout } = useAuth();
   // State variables (from context)
   const {
-    activeTab, setActiveTab, showDatePicker, setShowDatePicker, expenses, setExpenses, newExpense, setNewExpense,
+    activeTab, setActiveTab, handleTabChange, showDatePicker, setShowDatePicker, expenses, setExpenses, newExpense, setNewExpense,
     roommates, setRoommates, newRoommate, setNewRoommate, summaryData, settlements, categories, setCategories,
     isLoading, categoryFilter, setCategoryFilter, dateRange, setDateRange, datePickerType, setDatePickerType,
     showCategoryModal, setShowCategoryModal, newCategoryName, setNewCategoryName, getFilteredExpenses,
@@ -134,6 +135,17 @@ function MainAppContent() {
   // Local state for date input
   const [tempDateInput, setTempDateInput] = useState('');
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const deviceWidth = Dimensions.get('window').width;
+  const tabOrder: Array<'expenses' | 'roommates' | 'summary' | 'financialInsights'> = ['expenses','roommates','summary','financialInsights'];
+
+  useEffect(() => {
+    const index = tabOrder.indexOf(activeTab as any);
+    if (index >= 0) {
+      scrollRef.current?.scrollTo({ x: index * deviceWidth, animated: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Base background style
   const backgroundStyle = {
@@ -148,7 +160,8 @@ function MainAppContent() {
       backgroundColor: colors.surface,
     },
     header: {
-      padding: 16,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
       backgroundColor: colors.surface,
@@ -157,11 +170,15 @@ function MainAppContent() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
+      flexWrap: 'nowrap',
     },
     headerTitle: {
-      fontSize: 26,
+      fontSize: 22,
       fontWeight: 'bold',
       color: colors.primary,
+      flexShrink: 1,
+      flexWrap: 'wrap',
+      maxWidth: '60%',
     },
     headerSubtitle: {
       fontSize: 14,
@@ -174,38 +191,47 @@ function MainAppContent() {
       fontStyle: 'italic',
     },
     logoutButton: {
-      padding: 8,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
       backgroundColor: colors.buttonSecondary,
       borderRadius: 6,
     },
     logoutText: {
       color: colors.text,
       fontWeight: '500',
+      fontSize: 12,
     },
     headerRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
+      minWidth: 130,
+      justifyContent: 'flex-end',
+      flexShrink: 0,
     },
     profileButton: {
-      padding: 8,
+      padding: 6,
       backgroundColor: colors.buttonSecondary,
-      borderRadius: 20,
-      marginRight: 8,
+      borderRadius: 16,
+      marginRight: 6,
     },
     profileEmoji: {
-      fontSize: 18,
+      fontSize: 16,
     },
     tabBar: {
       flexDirection: 'row',
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
       backgroundColor: colors.surface,
+      flexWrap: 'wrap',
+      justifyContent: 'space-around',
     },
     tabButton: {
-      flex: 1,
-      padding: 12,
+      minWidth: 80,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
       alignItems: 'center',
+      flexShrink: 1,
     },
     activeTab: {
       borderBottomWidth: 3,
@@ -214,7 +240,9 @@ function MainAppContent() {
     },
     tabText: {
       color: colors.textSecondary,
-      fontSize: 14,
+      fontSize: 13,
+      textAlign: 'center',
+      flexWrap: 'wrap',
     },
     activeTabText: {
       color: colors.primary,
@@ -225,11 +253,11 @@ function MainAppContent() {
       flex: 1,
     },
     card: {
-      backgroundColor: isDarkMode ? '#1E1E1E' : '#ffffff',
+      backgroundColor: colors.card,
       borderRadius: 12,
       padding: 16,
       marginBottom: 16,
-      shadowColor: '#000',
+      shadowColor: colors.shadow,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.2,
       shadowRadius: 4,
@@ -238,22 +266,22 @@ function MainAppContent() {
     cardTitle: {
       fontSize: 18,
       fontWeight: '600',
-      color: isDarkMode ? '#FFFFFF' : '#000000',
+      color: colors.text,
       marginBottom: 12,
     },
     input: {
       borderWidth: 1,
-      borderColor: isDarkMode ? '#333' : '#ccc',
+      borderColor: colors.border,
       borderRadius: 8,
       padding: 12,
       marginBottom: 12,
-      backgroundColor: isDarkMode ? '#2A2A2A' : '#ffffff',
-      color: isDarkMode ? '#FFFFFF' : '#000000',
+      backgroundColor: colors.surface,
+      color: colors.text,
     },
     label: {
       fontSize: 14,
       fontWeight: '500',
-      color: isDarkMode ? '#DDDDDD' : '#333333',
+      color: colors.text,
       marginBottom: 8,
     },
     selectContainer: {
@@ -263,27 +291,27 @@ function MainAppContent() {
     },
     selectItem: {
       borderWidth: 1,
-      borderColor: isDarkMode ? '#333' : '#ddd',
+      borderColor: colors.border,
       borderRadius: 8,
       padding: 8,
-      backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
+      backgroundColor: colors.buttonSecondary,
       minWidth: 80,
       alignItems: 'center',
       margin: 4,
     },
     selectedItem: {
-      backgroundColor: '#4F46E5',
-      borderColor: '#4F46E5',
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
     },
     selectItemText: {
-      color: isDarkMode ? '#A1A1A1' : '#666666',
+      color: colors.textSecondary,
     },
     selectedItemText: {
       color: '#FFFFFF',
       fontWeight: '500',
     },
     addButton: {
-      backgroundColor: '#4F46E5',
+      backgroundColor: colors.buttonPrimary,
       padding: 14,
       borderRadius: 8,
       alignItems: 'center',
@@ -297,11 +325,11 @@ function MainAppContent() {
     emptyMessage: {
       textAlign: 'center',
       padding: 16,
-      color: isDarkMode ? '#A1A1A1' : '#6B7280',
+      color: colors.textSecondary,
     },
     expenseItem: {
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#333' : '#eee',
+      borderBottomColor: colors.borderLight,
       paddingVertical: 12,
       marginBottom: 8,
     },
@@ -314,29 +342,29 @@ function MainAppContent() {
     expenseDescription: {
       fontSize: 16,
       fontWeight: '500',
-      color: isDarkMode ? '#FFFFFF' : '#000000',
+      color: colors.text,
       flex: 1,
       marginRight: 8,
     },
     expenseAmount: {
       fontSize: 16,
       fontWeight: '600',
-      color: '#10B981',
+      color: colors.success,
     },
     expenseDetails: {
       fontSize: 14,
-      color: isDarkMode ? '#A1A1A1' : '#6B7280',
+      color: colors.textSecondary,
       marginBottom: 2,
     },
     expenseDate: {
       fontSize: 12,
-      color: isDarkMode ? '#9CA3AF' : '#9CA3AF',
+      color: colors.textPlaceholder,
       marginBottom: 8,
       fontStyle: 'italic',
     },
     expenseSplitWith: {
       fontSize: 14,
-      color: isDarkMode ? '#A1A1A1' : '#6B7280',
+      color: colors.textSecondary,
       marginTop: 4,
     },
     deleteButton: {
@@ -345,7 +373,7 @@ function MainAppContent() {
       marginTop: 8,
     },
     deleteButtonText: {
-      color: '#EF4444',
+      color: colors.error,
       fontSize: 14,
       fontWeight: '500',
     },
@@ -368,22 +396,22 @@ function MainAppContent() {
     roommateInput: {
       flex: 1,
       borderWidth: 1,
-      borderColor: isDarkMode ? '#333' : '#ccc',
+      borderColor: colors.border,
       borderRadius: 8,
       padding: 12,
       marginRight: 8,
-      backgroundColor: isDarkMode ? '#2A2A2A' : '#ffffff',
-      color: isDarkMode ? '#FFFFFF' : '#000000',
+      backgroundColor: colors.surface,
+      color: colors.text,
     },
     summaryItem: {
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#333' : '#eee',
+      borderBottomColor: colors.borderLight,
       paddingVertical: 12,
     },
     summaryName: {
       fontSize: 16,
       fontWeight: '600',
-      color: isDarkMode ? '#FFFFFF' : '#000000',
+      color: colors.text,
     },
     summaryDetails: {
       marginLeft: 8,
@@ -395,56 +423,56 @@ function MainAppContent() {
     },
     summaryLabel: {
       width: 60,
-      color: isDarkMode ? '#A1A1A1' : '#6B7280',
+      color: colors.textSecondary,
     },
     summaryValue: {
-      color: isDarkMode ? '#DDDDDD' : '#333333',
+      color: colors.text,
     },
     summaryBalance: {
       fontWeight: '600',
     },
     positiveBalance: {
-      color: '#10B981',
+      color: colors.success,
     },
     negativeBalance: {
-      color: '#EF4444',
+      color: colors.error,
     },
     settlementItem: {
       paddingVertical: 8,
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#333' : '#eee',
+      borderBottomColor: colors.borderLight,
     },
     settlementText: {
       fontSize: 14,
-      color: isDarkMode ? '#E5E7EB' : '#333333',
+      color: colors.text,
     },
     debtorName: {
-      color: '#EF4444',
+      color: colors.error,
       fontWeight: '600',
     },
     creditorName: {
-      color: '#10B981',
+      color: colors.success,
       fontWeight: '600',
     },
     settlementAmount: {
-      color: '#4F46E5',
+      color: colors.primary,
       fontWeight: '600',
     },
     filterContainer: {
       marginBottom: 16,
-      backgroundColor: isDarkMode ? '#1A1A1A' : '#f5f5f5',
+      backgroundColor: colors.surface,
       padding: 12,
       borderRadius: 8,
     },
     filterTitle: {
       fontSize: 16,
       fontWeight: '600',
-      color: isDarkMode ? '#DDDDDD' : '#333333',
+      color: colors.text,
       marginBottom: 8,
     },
     picker: {
       height: 50,
-      color: isDarkMode ? '#FFFFFF' : '#000000',
+      color: colors.text,
     },
     dateRangeContainer: {
       flexDirection: 'row',
@@ -454,13 +482,13 @@ function MainAppContent() {
     dateButton: {
       flex: 1,
       padding: 10,
-      backgroundColor: isDarkMode ? '#2A2A2A' : '#E5E7EB',
+      backgroundColor: colors.buttonSecondary,
       borderRadius: 6,
       margin: 2,
       alignItems: 'center',
     },
     dateButtonText: {
-      color: isDarkMode ? '#DDDDDD' : '#333333',
+      color: colors.text,
     },
     modalBackground: {
       flex: 1,
@@ -505,17 +533,17 @@ function MainAppContent() {
       color: colors.text,
     },
     confirmButtonText: {
-      color: '#FFFFFF',
+      color: isDarkMode ? colors.text : '#FFFFFF',
     },
     categoryTag: {
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 4,
       marginRight: 4,
-      backgroundColor: '#4F46E5',
+      backgroundColor: colors.primary,
     },
     categoryTagText: {
-      color: '#FFFFFF',
+      color: isDarkMode ? colors.text : '#FFFFFF',
       fontSize: 12,
     },
     statisticsCard: {
@@ -526,16 +554,16 @@ function MainAppContent() {
       justifyContent: 'space-between',
       paddingVertical: 8,
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#333' : '#eee',
+      borderBottomColor: colors.borderLight,
     },
     statLabel: {
       fontSize: 14,
-      color: isDarkMode ? '#A1A1A1' : '#6B7280',
+      color: colors.textSecondary,
     },
     statValue: {
       fontSize: 14,
       fontWeight: '600',
-      color: isDarkMode ? '#FFFFFF' : '#000000',
+      color: colors.text,
     },
     loadingContainer: {
       flex: 1,
@@ -545,11 +573,11 @@ function MainAppContent() {
     pickerItem: {
       padding: 10,
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#333' : '#eee',
+      borderBottomColor: colors.borderLight,
     },
     pickerItemText: {
       fontSize: 16,
-      color: isDarkMode ? '#FFFFFF' : '#000000',
+      color: colors.text,
       textAlign: 'center',
     },
     categoryPickerContainer: {
@@ -560,25 +588,25 @@ function MainAppContent() {
     },
     categoryPickerItem: {
       borderWidth: 1,
-      borderColor: isDarkMode ? '#333' : '#ddd',
+      borderColor: colors.border,
       borderRadius: 8,
       padding: 8,
-      backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
+      backgroundColor: isDarkMode ? colors.surface : colors.buttonSecondary,
       margin: 4,
       width: '48%',
       alignItems: 'center',
       marginBottom: 8,
     },
     selectedCategoryItem: {
-      backgroundColor: '#4F46E5',
-      borderColor: '#4F46E5',
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
     },
   });
 
   if (isLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={{color: colors.text, marginTop: 16}}>
           Loading your data...
         </Text>
@@ -606,7 +634,7 @@ function MainAppContent() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.headerTitle}>Roommate Expense Tracker</Text>
+            <Text style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit>Roommate Expense Tracker</Text>
             <Text style={styles.headerSubtitle}>Track and manage shared expenses</Text>
           </View>
           <View style={styles.headerRight}>
@@ -625,46 +653,63 @@ function MainAppContent() {
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'expenses' && styles.activeTab]}
-          onPress={() => setActiveTab('expenses')}>
+          onPress={() => handleTabChange('expenses')}>
           <Text style={[styles.tabText, activeTab === 'expenses' && styles.activeTabText]}>
             Expenses
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'roommates' && styles.activeTab]}
-          onPress={() => setActiveTab('roommates')}>
+          onPress={() => handleTabChange('roommates')}>
           <Text style={[styles.tabText, activeTab === 'roommates' && styles.activeTabText]}>
             Roommates
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'summary' && styles.activeTab]}
-          onPress={() => setActiveTab('summary')}>
+          onPress={() => handleTabChange('summary')}>
           <Text style={[styles.tabText, activeTab === 'summary' && styles.activeTabText]}>
             Summary
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'settlements' && styles.activeTab]}
-          onPress={() => setActiveTab('settlements')}>
-          <Text style={[styles.tabText, activeTab === 'settlements' && styles.activeTabText]}>
-            Settlements
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'statistics' && styles.activeTab]}
-          onPress={() => setActiveTab('statistics')}>
-          <Text style={[styles.tabText, activeTab === 'statistics' && styles.activeTabText]}>
-            Statistics
+          style={[styles.tabButton, activeTab === 'financialInsights' && styles.activeTab]}
+          onPress={() => handleTabChange('financialInsights')}>
+          <Text style={[styles.tabText, activeTab === 'financialInsights' && styles.activeTabText]}>
+            Insights
           </Text>
         </TouchableOpacity>
         {null}
       </View>
-      {activeTab === 'expenses' && <ExpensesTab />}
-      {activeTab === 'roommates' && <RoommatesTab />}
-      {activeTab === 'summary' && <SummaryTab />}
-      {activeTab === 'settlements' && <SettlementsTab />}
-      {activeTab === 'statistics' && <StatisticsTab />}
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => {
+          const x = e.nativeEvent.contentOffset.x;
+          const index = Math.round(x / deviceWidth);
+          const nextTab = tabOrder[index];
+          if (nextTab && nextTab !== activeTab) {
+            handleTabChange(nextTab);
+          }
+        }}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1 }}
+     >
+        <View style={{ width: deviceWidth, flex: 1 }}>
+          <ExpensesTab />
+        </View>
+        <View style={{ width: deviceWidth, flex: 1 }}>
+          <RoommatesTab />
+        </View>
+        <View style={{ width: deviceWidth, flex: 1 }}>
+          <SummaryTab />
+        </View>
+        <View style={{ width: deviceWidth, flex: 1 }}>
+          <FinancialInsightsTab />
+        </View>
+      </ScrollView>
       {null}
       <Modal
         animationType="slide"

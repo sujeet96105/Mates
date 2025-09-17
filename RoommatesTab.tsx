@@ -22,7 +22,7 @@ const RoommatesTab = () => {
     cardTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 12 },
     roommateInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 12, backgroundColor: isDarkMode ? colors.buttonSecondary : colors.surface, color: colors.text },
     addButton: { backgroundColor: colors.primary, padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-    addButtonText: { color: 'white', fontWeight: '600', fontSize: 16 },
+    addButtonText: { color: isDarkMode ? colors.text : '#FFFFFF', fontWeight: '600', fontSize: 16 },
     roommateItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
     roommateName: { fontSize: 16, color: colors.text },
     deleteButton: { alignSelf: 'flex-start', padding: 6, marginTop: 8 },
@@ -70,4 +70,4 @@ const RoommatesTab = () => {
   );
 };
 
-export default RoommatesTab; 
+export default RoommatesTab;

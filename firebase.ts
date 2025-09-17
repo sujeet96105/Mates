@@ -1,6 +1,6 @@
 // firebase.ts - Firebase initialization with Auth and Firestore
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
-import { getFirestore, initializeFirestore, Firestore, connectFirestoreEmulator, enableNetwork, disableNetwork } from "firebase/firestore";
+import { getFirestore, initializeFirestore, Firestore, connectFirestoreEmulator, enableNetwork, disableNetwork, setLogLevel } from "firebase/firestore";
 import { collection, addDoc, serverTimestamp, onSnapshot, getDocs } from "firebase/firestore";
 import { configureFirestoreForReactNative, FirestoreNetworkManager } from "./firestore-config";
 import {
@@ -71,7 +71,9 @@ try {
     db = global.__FIRESTORE__ as Firestore;
   } else {
     db = initializeFirestore(app, {
-      experimentalForceLongPolling: true,
+      // Auto-detect long polling to avoid WebChannel issues on some Android devices/emulators
+      experimentalAutoDetectLongPolling: true,
+      // Do not combine with experimentalForceLongPolling
       useFetchStreams: false,
     });
     if (typeof global !== 'undefined') global.__FIRESTORE__ = db;
@@ -79,6 +81,8 @@ try {
 
   // Configure Firestore for React Native to prevent WebChannel errors
   const cleanupErrorHandling = configureFirestoreForReactNative(db);
+  // Reduce Firestore SDK log noise to only errors
+  try { setLogLevel('error'); } catch {}
   
   // Initialize network manager
   firestoreNetworkManager = new FirestoreNetworkManager(db);
@@ -126,13 +130,19 @@ const subscribeToTripExpenses = (
   callback: (expenses: any[]) => void
 ) => {
   const expenseRef = collection(db, 'users', userId, 'trips', tripId, 'expenses');
-  const unsubscribe = onSnapshot(expenseRef, (snapshot) => {
-    const expenses: any[] = [];
-    snapshot.forEach((docSnapshot) => {
-      expenses.push({ id: docSnapshot.id, ...docSnapshot.data() });
-    });
-    callback(expenses);
-  });
+  const unsubscribe = onSnapshot(
+    expenseRef,
+    (snapshot) => {
+      const expenses: any[] = [];
+      snapshot.forEach((docSnapshot) => {
+        expenses.push({ id: docSnapshot.id, ...docSnapshot.data() });
+      });
+      callback(expenses);
+    },
+    (error) => {
+      console.warn('Firestore snapshot error (expenses):', error?.message || error);
+    }
+  );
   return unsubscribe;
 };
 
