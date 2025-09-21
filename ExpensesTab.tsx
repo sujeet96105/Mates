@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useAppState } from './AppStateProvider';
 import { useTheme } from './useTheme';
 
-const ExpensesTab = () => {
+type ExpensesTabProps = {
+  tabScrollSimultaneousRef?: any;
+};
+
+const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) => {
   const {
     isLoading,
     categoryFilter,
@@ -19,10 +24,37 @@ const ExpensesTab = () => {
     handleAddExpense,
     getFilteredExpenses,
     handleRemoveExpense,
+    tabsScrollEnabled,
+    setTabsScrollEnabled,
   } = useAppState();
 
   // Use our custom theme hook for consistent theming
   const { isDarkMode, colors } = useTheme();
+
+  // Ensure parent tab swipe is re-enabled even if a child gesture doesn't report end
+  const reenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleChildScrollBegin = () => {
+    setTabsScrollEnabled(false);
+    if (reenableTimerRef.current) {
+      clearTimeout(reenableTimerRef.current);
+      reenableTimerRef.current = null;
+    }
+    reenableTimerRef.current = setTimeout(() => {
+      setTabsScrollEnabled(true);
+      reenableTimerRef.current = null;
+    }, 800);
+  };
+  const handleChildScrollEnd = () => {
+    if (reenableTimerRef.current) {
+      clearTimeout(reenableTimerRef.current);
+      reenableTimerRef.current = null;
+    }
+    setTabsScrollEnabled(true);
+  };
+
+  // Show custom category input when "Other" is selected in Add Expense
+  const [showCustomCategory, setShowCustomCategory] = useState(newExpense.category === 'Other');
+  const [customCategoryText, setCustomCategoryText] = useState('');
 
   const styles = StyleSheet.create({
     tabContent: { padding: 16, flex: 1 },
@@ -89,14 +121,27 @@ const ExpensesTab = () => {
             <Text style={styles.filterTitle}>Filter Expenses</Text>
             {/* Category Filter */}
             <Text style={styles.label}>Category:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <GHScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled
+              directionalLockEnabled
+              scrollEventThrottle={16}
+              decelerationRate="fast"
+              onScrollBeginDrag={handleChildScrollBegin}
+              onScrollEndDrag={handleChildScrollEnd}
+              onMomentumScrollEnd={handleChildScrollEnd}
+              onTouchEndCapture={handleChildScrollEnd}
+              // @ts-ignore react-native-gesture-handler prop passthrough
+              simultaneousHandlers={tabScrollSimultaneousRef}
+            >
               <View style={{ flexDirection: 'row' }}>
                 <TouchableOpacity
                   style={[
                     styles.selectItem,
                     categoryFilter === 'All' && styles.selectedItem,
                   ]}
-                  onPress={() => setCategoryFilter('All')}
+                  onPress={() => { setCategoryFilter('All'); handleChildScrollEnd(); }}
                 >
                   <Text
                     style={[
@@ -114,7 +159,7 @@ const ExpensesTab = () => {
                       styles.selectItem,
                       categoryFilter === category && styles.selectedItem,
                     ]}
-                    onPress={() => setCategoryFilter(category)}
+                    onPress={() => { setCategoryFilter(category); handleChildScrollEnd(); }}
                   >
                     <Text
                       style={[
@@ -127,7 +172,7 @@ const ExpensesTab = () => {
                   </TouchableOpacity>
                 ))}
               </View>
-            </ScrollView>
+            </GHScrollView>
             {/* Date Range Filter */}
             <Text style={[styles.label, { marginTop: 12 }]}>Date Range:</Text>
             <View style={styles.dateRangeContainer}>
@@ -145,7 +190,21 @@ const ExpensesTab = () => {
               </TouchableOpacity>
             </View>
             {/* Quick date range buttons */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+            <GHScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginTop: 8 }}
+              nestedScrollEnabled
+              directionalLockEnabled
+              scrollEventThrottle={16}
+              decelerationRate="fast"
+              onScrollBeginDrag={handleChildScrollBegin}
+              onScrollEndDrag={handleChildScrollEnd}
+              onMomentumScrollEnd={handleChildScrollEnd}
+              onTouchEndCapture={handleChildScrollEnd}
+              // @ts-ignore react-native-gesture-handler prop passthrough
+              simultaneousHandlers={tabScrollSimultaneousRef}
+            >
               <View style={{ flexDirection: 'row' }}>
                 <TouchableOpacity
                   style={[styles.selectItem, { marginRight: 8 }]}
@@ -163,6 +222,7 @@ const ExpensesTab = () => {
                     const weekAgoStr = weekAgo.toISOString().split('T')[0];
                     
                     setDateRange({ start: weekAgoStr, end: todayStr });
+                    handleChildScrollEnd();
                   }}
                 >
                   <Text style={styles.selectItemText}>Last 7 days</Text>
@@ -183,6 +243,7 @@ const ExpensesTab = () => {
                     const monthAgoStr = monthAgo.toISOString().split('T')[0];
                     
                     setDateRange({ start: monthAgoStr, end: todayStr });
+                    handleChildScrollEnd();
                   }}
                 >
                   <Text style={styles.selectItemText}>Last 30 days</Text>
@@ -203,6 +264,7 @@ const ExpensesTab = () => {
                     const yearAgoStr = yearAgo.toISOString().split('T')[0];
                     
                     setDateRange({ start: yearAgoStr, end: todayStr });
+                    handleChildScrollEnd();
                   }}
                 >
                   <Text style={styles.selectItemText}>Last Year</Text>
@@ -219,17 +281,18 @@ const ExpensesTab = () => {
                     const oldDate = "2000-01-01";
                     
                     setDateRange({ start: oldDate, end: todayStr });
+                    handleChildScrollEnd();
                   }}
                 >
                   <Text style={styles.selectItemText}>All Time</Text>
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </GHScrollView>
           </View>
           {/* Add Expense Form */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Add New Expense</Text>
-            <TextInput
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Add New Expense</Text>
+              <TextInput
               style={styles.input}
               placeholder="Description"
               placeholderTextColor={colors.textPlaceholder}
@@ -320,7 +383,17 @@ const ExpensesTab = () => {
                     styles.categoryPickerItem,
                     newExpense.category === category && styles.selectedCategoryItem,
                   ]}
-                  onPress={() => setNewExpense({ ...newExpense, category })}
+                  onPress={() => {
+                    if (category === 'Other') {
+                      setShowCustomCategory(true);
+                      setCustomCategoryText('');
+                      setNewExpense({ ...newExpense, category: 'Other' });
+                    } else {
+                      setShowCustomCategory(false);
+                      setCustomCategoryText('');
+                      setNewExpense({ ...newExpense, category });
+                    }
+                  }}
                 >
                   <Text
                     style={[
@@ -333,6 +406,18 @@ const ExpensesTab = () => {
                 </TouchableOpacity>
               ))}
             </View>
+            {showCustomCategory && (
+              <TextInput
+                style={styles.input}
+                placeholder="Enter custom category (optional)"
+                placeholderTextColor={colors.textPlaceholder}
+                value={customCategoryText}
+                onChangeText={(text) => {
+                  setCustomCategoryText(text);
+                  setNewExpense({ ...newExpense, category: text.trim().length ? text : 'Other' });
+                }}
+              />
+            )}
             <TouchableOpacity style={styles.addButton} onPress={handleAddExpense}>
               <Text style={styles.addButtonText}>Add Expense</Text>
             </TouchableOpacity>

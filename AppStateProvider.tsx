@@ -56,6 +56,8 @@ interface AppStateContextType {
   activeTab: string;
   setActiveTab: React.Dispatch<React.SetStateAction<string>>;
   handleTabChange: (tab: string) => void;
+  tabsScrollEnabled: boolean;
+  setTabsScrollEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   expenses: Expense[];
   setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
   newExpense: Expense;
@@ -101,6 +103,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   
   // All state and handlers from App.tsx go here
   const [activeTab, setActiveTab] = useState('expenses');
+  const [tabsScrollEnabled, setTabsScrollEnabled] = useState(true);
   
   // Handle tab selection to redirect settlements and statistics to financialInsights
   const handleTabChange = (tab: string) => {
@@ -567,6 +570,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         activeTab,
         setActiveTab,
         handleTabChange,
+        tabsScrollEnabled,
+        setTabsScrollEnabled,
         expenses,
         setExpenses,
         newExpense,

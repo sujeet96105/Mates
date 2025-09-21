@@ -1,6 +1,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { View, Text } from 'react-native';
+import { GestureHandlerRootView, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import {
   StatusBar,
   StyleSheet,
@@ -129,13 +130,14 @@ function MainAppContent() {
     isLoading, categoryFilter, setCategoryFilter, dateRange, setDateRange, datePickerType, setDatePickerType,
     showCategoryModal, setShowCategoryModal, newCategoryName, setNewCategoryName, getFilteredExpenses,
     handleAddExpense, handleAddRoommate, handleRemoveExpense, handleRemoveRoommate, handleSplitWithChange,
-    openDatePicker, updateDateRange, confirmAddCategory, generateExpenseStats
+    openDatePicker, updateDateRange, confirmAddCategory, generateExpenseStats,
+    tabsScrollEnabled
   } = useAppState();
 
   // Local state for date input
   const [tempDateInput, setTempDateInput] = useState('');
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<GHScrollView>(null);
   const deviceWidth = Dimensions.get('window').width;
   const tabOrder: Array<'expenses' | 'roommates' | 'summary' | 'financialInsights'> = ['expenses','roommates','summary','financialInsights'];
 
@@ -629,6 +631,7 @@ function MainAppContent() {
   };
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={backgroundStyle}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <View style={styles.header}>
@@ -681,12 +684,13 @@ function MainAppContent() {
         </TouchableOpacity>
         {null}
       </View>
-      <ScrollView
+      <GHScrollView
         ref={scrollRef}
         horizontal
         pagingEnabled
+        scrollEnabled={tabsScrollEnabled}
         showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
+        onMomentumScrollEnd={(e: any) => {
           const x = e.nativeEvent.contentOffset.x;
           const index = Math.round(x / deviceWidth);
           const nextTab = tabOrder[index];
@@ -698,7 +702,7 @@ function MainAppContent() {
         contentContainerStyle={{ flexGrow: 1 }}
      >
         <View style={{ width: deviceWidth, flex: 1 }}>
-          <ExpensesTab />
+          <ExpensesTab tabScrollSimultaneousRef={scrollRef} />
         </View>
         <View style={{ width: deviceWidth, flex: 1 }}>
           <RoommatesTab />
@@ -709,7 +713,7 @@ function MainAppContent() {
         <View style={{ width: deviceWidth, flex: 1 }}>
           <FinancialInsightsTab />
         </View>
-      </ScrollView>
+      </GHScrollView>
       {null}
       <Modal
         animationType="slide"
@@ -834,5 +838,6 @@ function MainAppContent() {
         </View>
       </Modal>
     </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
