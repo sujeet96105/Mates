@@ -1,8 +1,13 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useRef, useState, useCallback } from 'react';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator, Alert, Modal, Dimensions } from 'react-native';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useAppState } from './AppStateProvider';
 import { useTheme } from './useTheme';
+import { ModernButton, ModernCard, ModernInput, Icons } from './ModernUI';
+import { exportExpensesToPdf } from './pdfExport_clean';
+import Share from 'react-native-share';
+import { db } from './firebase';
+import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 
 type ExpensesTabProps = {
   tabScrollSimultaneousRef?: any;
@@ -26,10 +31,14 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     handleRemoveExpense,
     tabsScrollEnabled,
     setTabsScrollEnabled,
+    expenses,
+    settlements,
   } = useAppState();
 
   // Use our custom theme hook for consistent theming
   const { isDarkMode, colors } = useTheme();
+  const deviceWidth = Dimensions.get('window').width;
+  const columns = deviceWidth >= 380 ? 3 : 2;
 
   // Ensure parent tab swipe is re-enabled even if a child gesture doesn't report end
   const reenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,39 +63,236 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
 
   // Show custom category input when "Other" is selected in Add Expense
   const [showCustomCategory, setShowCustomCategory] = useState(newExpense.category === 'Other');
+  // Ensure default selected category button is Groceries when mounting
+  React.useEffect(() => {
+    if (!newExpense.category) {
+      setNewExpense({ ...newExpense, category: 'Groceries' });
+    }
+  }, []);
   const [customCategoryText, setCustomCategoryText] = useState('');
+  const [showCategorySelector, setShowCategorySelector] = useState(false);
 
   const styles = StyleSheet.create({
-    tabContent: { padding: 16, flex: 1 },
-    filterContainer: { marginBottom: 16, backgroundColor: isDarkMode ? colors.card : colors.surface, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
-    filterTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 8 },
-    label: { fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 8 },
-    selectItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8, backgroundColor: isDarkMode ? colors.surface : colors.buttonSecondary, minWidth: 80, alignItems: 'center', margin: 4 },
+    tabContent: { padding: 20, flex: 1, backgroundColor: colors.backgroundSecondary },
+    filterContainer: { 
+      marginBottom: 20, 
+      backgroundColor: colors.card, 
+      padding: 20, 
+      borderRadius: 16, 
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
+      borderWidth: 1, 
+      borderColor: colors.borderLight 
+    },
+    filterTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 12, letterSpacing: -0.3 },
+    label: { fontSize: 15, fontWeight: '600', color: colors.text, marginBottom: 12 },
+    selectItem: { 
+      borderWidth: 1, 
+      borderColor: colors.border, 
+      borderRadius: 12, 
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: colors.surface, 
+      minWidth: 90, 
+      alignItems: 'center', 
+      margin: 6,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2
+    },
     selectedItem: { backgroundColor: colors.primary, borderColor: colors.primary },
-    selectItemText: { color: colors.text },
-    selectedItemText: { color: isDarkMode ? colors.text : '#FFFFFF', fontWeight: '500' },
-    dateRangeContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-    dateButton: { flex: 1, padding: 10, backgroundColor: isDarkMode ? colors.surface : colors.buttonSecondary, borderRadius: 6, margin: 2, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
-    dateButtonText: { color: colors.text },
-    card: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
-    cardTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 12 },
-    input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 12, backgroundColor: isDarkMode ? colors.buttonSecondary : colors.surface, color: colors.text },
-    addButton: { backgroundColor: colors.primary, padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-    addButtonText: { color: 'white', fontWeight: '600', fontSize: 16 },
-    selectContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 },
-    categoryPickerContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16, justifyContent: 'space-between' },
-    categoryPickerItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8, backgroundColor: colors.buttonSecondary, margin: 4, width: '48%', alignItems: 'center', marginBottom: 8 },
-    selectedCategoryItem: { backgroundColor: colors.primary, borderColor: colors.primary },
-    expenseItem: { borderBottomWidth: 1, borderBottomColor: colors.borderLight, paddingVertical: 12, marginBottom: 8 },
-    expenseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-    expenseDescription: { fontSize: 16, fontWeight: '500', color: colors.text, flex: 1, marginRight: 8 },
-    expenseAmount: { fontSize: 16, fontWeight: '600', color: colors.success },
-    expenseDetails: { fontSize: 14, color: colors.textSecondary, marginBottom: 2 },
-    expenseDate: { fontSize: 12, color: colors.textPlaceholder, marginBottom: 8, fontStyle: 'italic' },
-    deleteButton: { alignSelf: 'flex-start', padding: 6, marginTop: 8 },
-    deleteButtonText: { color: colors.error, fontSize: 14, fontWeight: '500' },
-    emptyMessage: { textAlign: 'center', padding: 16, color: colors.textSecondary },
+    selectItemText: { color: colors.text, fontSize: 14, fontWeight: '500' },
+    selectedItemText: { color: colors.textOnPrimary, fontWeight: '600' },
+    dateRangeContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, gap: 8 },
+    dateButton: { 
+      flex: 1, 
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: colors.surface, 
+      borderRadius: 12, 
+      alignItems: 'center', 
+      borderWidth: 1, 
+      borderColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2
+    },
+    dateButtonText: { color: colors.text, fontSize: 14, fontWeight: '500' },
+    card: { 
+      backgroundColor: colors.card, 
+      borderRadius: 16, 
+      padding: 20, 
+      marginBottom: 20, 
+      shadowColor: colors.shadow, 
+      shadowOffset: { width: 0, height: 4 }, 
+      shadowOpacity: 0.1, 
+      shadowRadius: 8, 
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.borderLight
+    },
+    cardTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 16, letterSpacing: -0.3 },
+    input: { 
+      borderWidth: 1, 
+      borderColor: colors.border, 
+      borderRadius: 12, 
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginBottom: 16, 
+      backgroundColor: colors.surface, 
+      color: colors.text,
+      fontSize: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1
+    },
+    dropdown: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      backgroundColor: colors.surface,
+      marginBottom: 12,
+    },
+    dropdownText: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    addButton: { 
+      backgroundColor: colors.primary, 
+      paddingVertical: 16,
+      paddingHorizontal: 24,
+      borderRadius: 12, 
+      alignItems: 'center', 
+      marginTop: 12,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 4
+    },
+    addButtonText: { color: colors.textOnPrimary, fontWeight: '600', fontSize: 16, letterSpacing: 0.5 },
+    selectContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16, gap: 4 },
+    categoryModalBackground: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 16,
+    },
+    categoryModalContent: {
+      width: '90%',
+      maxHeight: '70%',
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+    },
+    pickerItem: {
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderLight,
+    },
+    pickerItemText: {
+      fontSize: 16,
+      color: colors.text,
+    },
+    expenseItem: { 
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: colors.borderLight
+    },
+    expenseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    expenseDescription: { fontSize: 16, fontWeight: '600', color: colors.text, flex: 1, marginRight: 8 },
+    expenseAmount: { fontSize: 18, fontWeight: '700', color: colors.success },
+    expenseDetails: { fontSize: 14, color: colors.textSecondary, marginBottom: 4, fontWeight: '500' },
+    expenseDate: { fontSize: 12, color: colors.textTertiary, marginBottom: 8 },
+    deleteButton: { alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, marginTop: 8, backgroundColor: colors.errorLight, borderRadius: 8 },
+    deleteButtonText: { color: colors.error, fontSize: 14, fontWeight: '600' },
+    emptyMessage: { textAlign: 'center', padding: 24, color: colors.textSecondary, fontSize: 16, fontWeight: '500' },
+    actionsRow: { marginTop: 8, alignItems: 'flex-end' },
+    exportButton: { backgroundColor: colors.primary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, alignItems: 'center', flexDirection: 'row', marginBottom: 24 },
+    exportButtonText: { color: 'white', fontWeight: '600', fontSize: 14 },
   });
+
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportAndClear = useCallback(async () => {
+    const allExpenses = expenses; // export full history, not just filtered list
+    if (!allExpenses || allExpenses.length === 0) {
+      Alert.alert('Nothing to Export', 'No expenses found to export.');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const { success, filePath, error } = await exportExpensesToPdf(allExpenses as any, settlements as any);
+      if (!success) {
+        Alert.alert('Export Failed', error || 'Could not create the PDF.');
+        return;
+      }
+      Alert.alert(
+        'Exported',
+        `PDF saved${filePath ? ` to\n${filePath}` : ''}.\n\nDo you want to clear your Firestore expenses now?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open', onPress: async () => { if (filePath) { try { await Share.open({ url: `file://${filePath}`, type: 'application/pdf', showAppsToView: true }); } catch {} } } },
+          { text: 'Clear', style: 'destructive', onPress: async () => {
+            try {
+              const expensesRef = collection(db!, 'expenses');
+              const idsWithFirestore = (allExpenses as any[]).filter(e => e.firestoreId).map(e => e.firestoreId as string);
+              if (idsWithFirestore.length > 0) {
+                const chunks: string[][] = [];
+                for (let i = 0; i < idsWithFirestore.length; i += 300) {
+                  chunks.push(idsWithFirestore.slice(i, i + 300));
+                }
+                for (const chunk of chunks) {
+                  await Promise.all(chunk.map(id => deleteDoc(doc(expensesRef, id))));
+                }
+              } else {
+                const numericIds = (allExpenses as any[]).map(e => e.id).filter(Boolean);
+                if (numericIds.length > 0) {
+                  const sliceSize = 10;
+                  for (let i = 0; i < numericIds.length; i += sliceSize) {
+                    const slice = numericIds.slice(i, i + sliceSize);
+                    const q = query(expensesRef, where('id', 'in', slice));
+                    const snap = await getDocs(q);
+                    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+                  }
+                }
+              }
+              Alert.alert('Cleared', 'Expenses cleared after export.');
+            } catch (e) {
+              Alert.alert('Error', 'Failed to clear expenses.');
+            }
+          } }
+        ]
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [expenses, settlements]);
 
   if (isLoading) {
     return (
@@ -315,6 +521,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                   style={[
                     styles.selectItem,
                     newExpense.paidBy === mate && styles.selectedItem,
+                    { width: columns === 3 ? '32%' : '48%' },
                   ]}
                   onPress={() => setNewExpense({ ...newExpense, paidBy: mate })}
                 >
@@ -336,6 +543,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                 style={[
                   styles.selectItem,
                   roommates.length > 0 && roommates.every((m) => newExpense.splitWith.includes(m)) && styles.selectedItem,
+                  { width: columns === 3 ? '32%' : '48%' },
                 ]}
                 onPress={() => {
                   const allSelected = roommates.length > 0 && roommates.every((m) => newExpense.splitWith.includes(m));
@@ -360,6 +568,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                   style={[
                     styles.selectItem,
                     newExpense.splitWith.includes(mate) && styles.selectedItem,
+                    { width: columns === 3 ? '32%' : '48%' },
                   ]}
                   onPress={() => handleSplitWithChange(mate)}
                 >
@@ -375,37 +584,46 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
               ))}
             </View>
             <Text style={styles.label}>Category:</Text>
-            <View style={styles.categoryPickerContainer}>
-              {categories.map((category) => (
-                <TouchableOpacity
-                  key={category}
-                  style={[
-                    styles.categoryPickerItem,
-                    newExpense.category === category && styles.selectedCategoryItem,
-                  ]}
-                  onPress={() => {
-                    if (category === 'Other') {
-                      setShowCustomCategory(true);
-                      setCustomCategoryText('');
-                      setNewExpense({ ...newExpense, category: 'Other' });
-                    } else {
-                      setShowCustomCategory(false);
-                      setCustomCategoryText('');
-                      setNewExpense({ ...newExpense, category });
-                    }
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.selectItemText,
-                      newExpense.category === category && styles.selectedItemText,
-                    ]}
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => setShowCategorySelector(prev => !prev)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownText}>
+                {newExpense.category || 'Select category'}
+              </Text>
+            </TouchableOpacity>
+            {showCategorySelector && (
+              <View style={{
+                backgroundColor: colors.card,
+                borderWidth: 1,
+                borderColor: colors.borderLight,
+                borderRadius: 12,
+                marginTop: 8,
+                overflow: 'hidden'
+              }}>
+                {categories.map((category) => (
+                  <TouchableOpacity
+                    key={category}
+                    style={{ paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.borderLight }}
+                    onPress={() => {
+                      if (category === 'Other') {
+                        setShowCustomCategory(true);
+                        setCustomCategoryText('');
+                        setNewExpense({ ...newExpense, category: 'Other' });
+                      } else {
+                        setShowCustomCategory(false);
+                        setCustomCategoryText('');
+                        setNewExpense({ ...newExpense, category });
+                      }
+                      setShowCategorySelector(false);
+                    }}
                   >
-                    {category}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text style={{ color: colors.text, fontSize: 16 }}>{category}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             {showCustomCategory && (
               <TextInput
                 style={styles.input}
@@ -421,6 +639,16 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
             <TouchableOpacity style={styles.addButton} onPress={handleAddExpense}>
               <Text style={styles.addButtonText}>Add Expense</Text>
             </TouchableOpacity>
+          </View>
+          {/* Actions near history */}
+          <View style={styles.actionsRow}>
+            {isExporting ? (
+              <ActivityIndicator />
+            ) : (
+              <TouchableOpacity style={styles.exportButton} onPress={handleExportAndClear} activeOpacity={0.9}>
+                <Text style={styles.exportButtonText}>Export & Clear</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </>
       }

@@ -30,12 +30,12 @@ interface Balance {
 }
 
 interface SummaryData {
-  [roommate: string]: Balance;
+  [friend: string]: Balance;
 }
 
 type StoredData = {
   expenses: Expense[];
-  roommates: string[];
+  friends: string[];
   categories: string[];
 };
 
@@ -62,10 +62,22 @@ interface AppStateContextType {
   setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
   newExpense: Expense;
   setNewExpense: React.Dispatch<React.SetStateAction<Expense>>;
+  // New naming convention
+  friends: string[];
+  setFriends: React.Dispatch<React.SetStateAction<string[]>>;
+  newFriend: string;
+  setNewFriend: React.Dispatch<React.SetStateAction<string>>;
+  handleAddFriend: () => void;
+  handleRemoveFriend: (mate: string) => void;
+  
+  // Backward compatibility aliases
   roommates: string[];
   setRoommates: React.Dispatch<React.SetStateAction<string[]>>;
   newRoommate: string;
   setNewRoommate: React.Dispatch<React.SetStateAction<string>>;
+  handleAddRoommate: () => void;
+  handleRemoveRoommate: (mate: string) => void;
+  
   summaryData: SummaryData;
   settlements: SettlementItem[];
   categories: string[];
@@ -85,10 +97,8 @@ interface AppStateContextType {
   setNewCategoryName: React.Dispatch<React.SetStateAction<string>>;
   getFilteredExpenses: () => Expense[];
   handleAddExpense: () => void;
-  handleAddRoommate: () => void;
   handleRemoveExpense: (id?: number) => void;
-  handleRemoveRoommate: (mate: string) => void;
-  handleSplitWithChange: (mate: string) => void;
+  handleSplitWithChange: (friend: string) => void;
   openDatePicker: (type: 'start' | 'end') => void;
   updateDateRange: (date: string) => void;
   confirmAddCategory: () => void;
@@ -122,10 +132,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     splitWith: [],
     date: new Date().toISOString().split('T')[0],
     time: new Date().toLocaleTimeString(),
-    category: 'Other',
+    category: 'Groceries',
   });
-  const [roommates, setRoommates] = useState<string[]>([]);
-  const [newRoommate, setNewRoommate] = useState<string>('');
+  const [friends, setFriends] = useState<string[]>([]);
+  const [newFriend, setNewFriend] = useState<string>('');
   const [summaryData, setSummaryData] = useState<SummaryData>({});
   const [settlements, setSettlements] = useState<SettlementItem[]>([]);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
@@ -153,7 +163,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setIsLoading(true);
       try {
         // Try local cache first for fast startup
-        let cachedRoommates: string[] | undefined;
+        let cachedFriends: string[] | undefined;
         let cachedCategories: string[] | undefined;
         try {
           const cacheKey = `mates:user:${user.uid}:profile`;
@@ -161,14 +171,14 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (cached) {
             const parsed = JSON.parse(cached);
             if (Array.isArray(parsed.roommates)) {
-              cachedRoommates = parsed.roommates;
-              setRoommates(parsed.roommates);
+              cachedFriends = parsed.roommates;
+              setFriends(parsed.roommates);
             }
             if (Array.isArray(parsed.categories)) {
               cachedCategories = parsed.categories;
               setCategories(parsed.categories);
             }
-            console.log('[Cache] Loaded roommates/categories from AsyncStorage');
+            console.log('[Cache] Loaded friends/categories from AsyncStorage');
           }
         } catch (e) {
           console.warn('[Cache] Failed to load from AsyncStorage', e);
@@ -200,7 +210,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (data) {
               const nextRoommates = Array.isArray(data.roommates) ? data.roommates : undefined;
               const nextCategories = Array.isArray(data.categories) ? data.categories : undefined;
-              if (nextRoommates && !arraysEqual(nextRoommates, roommates)) setRoommates(nextRoommates); 
+          if (nextRoommates && !arraysEqual(nextRoommates, friends)) setFriends(nextRoommates);
               if (nextCategories && !arraysEqual(nextCategories, categories)) setCategories(nextCategories);
               // Cache locally
               AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({
@@ -238,7 +248,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           // Initialize local state immediately as well (before first snapshot)
           const initialRoommates = Array.isArray(userData.roommates) ? userData.roommates : [];
           const initialCategories = Array.isArray(userData.categories) ? userData.categories : DEFAULT_CATEGORIES;
-          setRoommates(initialRoommates);
+          setFriends(initialRoommates);
           setCategories(initialCategories);
           // Cache initial fetch
           AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({
@@ -247,14 +257,14 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           })).catch(() => {});
 
           // Reconcile: if Firestore has empty roommates but cache has data, push cache to Firestore
-          if ((initialRoommates.length === 0) && cachedRoommates && cachedRoommates.length > 0) {
+          if ((initialRoommates.length === 0) && cachedFriends && cachedFriends.length > 0) {
             try {
-              console.log('[Sync] Firestore roommates empty; restoring from cache');
-              await setDoc(userDocRef, { roommates: cachedRoommates, updatedAt: new Date() }, { merge: true });
-              setRoommates(cachedRoommates);
-              await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: cachedRoommates, categories: initialCategories.length ? initialCategories : (cachedCategories ?? DEFAULT_CATEGORIES) }));
+              console.log('[Sync] Firestore friends empty; restoring from cache');
+              await setDoc(userDocRef, { roommates: cachedFriends, updatedAt: new Date() }, { merge: true });
+              setFriends(cachedFriends);
+              await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: cachedFriends, categories: initialCategories.length ? initialCategories : (cachedCategories ?? DEFAULT_CATEGORIES) }));
             } catch (e) {
-              console.warn('[Sync] Failed to restore roommates from cache', e);
+              console.warn('[Sync] Failed to restore friends from cache', e);
             }
           }
         } else {
@@ -308,15 +318,24 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Removed auto-save effect to avoid feedback loops with onSnapshot updates.
   // Saving to Firestore is handled explicitly in action handlers (e.g., handleAddRoommate, confirmAddCategory).
 
-  // Calculate balances whenever expenses or roommates change
+  // Calculate balances whenever expenses or friends change
   useEffect(() => {
     calculateBalances();
-  }, [expenses, roommates]);
+  }, [expenses, friends]);
 
   const getFilteredExpenses = () => {
     return expenses.filter(expense => {
       // Check if category matches
-      const matchesCategory = categoryFilter === 'All' || expense.category === categoryFilter;
+      let matchesCategory = true;
+      if (categoryFilter !== 'All') {
+        if (categoryFilter === 'Other') {
+          const categoriesWithoutOther = categories.filter(c => c !== 'Other');
+          // Include items explicitly marked as 'Other' or items whose category is not in the known category list
+          matchesCategory = expense.category === 'Other' || !categoriesWithoutOther.includes(expense.category);
+        } else {
+          matchesCategory = expense.category === categoryFilter;
+        }
+      }
       
       // Normalize dates for comparison by setting all to midnight
       const expenseDate = new Date(expense.date);
@@ -337,13 +356,13 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const calculateBalances = () => {
     const balances: { [key: string]: Balance } = {};
-    roommates.forEach((mate) => {
+    friends.forEach((mate) => {
       balances[mate] = { paid: 0, owes: 0, balance: 0 };
     });
     expenses.forEach((expense) => {
       const payer = expense.paidBy;
       const amount = Number(expense.amount);
-      const splitWith = expense.splitWith.length > 0 ? expense.splitWith : [...roommates];
+      const splitWith = expense.splitWith.length > 0 ? expense.splitWith : [...friends];
       const splitAmount = amount / splitWith.length;
       if (balances[payer]) {
         balances[payer].paid += amount;
@@ -354,7 +373,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       });
     });
-    roommates.forEach((mate) => {
+    friends.forEach((mate) => {
       if (balances[mate]) {
         balances[mate].balance = balances[mate].paid - balances[mate].owes;
       }
@@ -366,7 +385,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const calculateSettlements = (balances: { [key: string]: Balance }) => {
     const creditors: { name: string; amount: number }[] = [];
     const debtors: { name: string; amount: number }[] = [];
-    roommates.forEach((mate) => {
+    friends.forEach((mate) => {
       if (balances[mate]?.balance > 0) {
         creditors.push({ name: mate, amount: balances[mate].balance });
       } else if (balances[mate]?.balance < 0) {
@@ -429,7 +448,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       // Update local state
       setExpenses([...expenses, expenseToAdd]);
-      setNewExpense({ description: '', amount: 0, paidBy: '', splitWith: [], date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString(), category: 'Other' });
+      setNewExpense({ description: '', amount: 0, paidBy: '', splitWith: [], date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString(), category: 'Groceries' });
     } catch (error) {
       console.error('Error adding expense:', error);
       Alert.alert('Error', 'Failed to add expense. Please try again.');
@@ -446,28 +465,31 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const handleAddRoommate = async () => {
-    if (!newRoommate.trim()) {
-      Alert.alert('Missing Information', 'Please enter a roommate name');
+  const handleAddFriend = async () => {
+    if (!newFriend.trim()) {
+      Alert.alert('Missing Information', 'Please enter a friend name');
       return;
     }
-    if (roommates.includes(newRoommate.trim())) {
-      Alert.alert('Duplicate Roommate', 'This roommate already exists');
+    if (friends.includes(newFriend.trim())) {
+      Alert.alert('Duplicate Friend', 'This friend already exists');
       return;
     }
-    const updatedRoommates = [...roommates, newRoommate.trim()];
-    setRoommates(updatedRoommates);
-    setNewRoommate('');
+    const updatedFriends = [...friends, newFriend.trim()];
+    setFriends(updatedFriends);
+    setNewFriend('');
     try {
       if (user) {
         const userDocRef = doc(db!, 'users', user.uid);
-        await setDoc(userDocRef, { roommates: updatedRoommates, updatedAt: new Date() }, { merge: true });
-        await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: updatedRoommates, categories }));
+        await setDoc(userDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true });
+        await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: updatedFriends, categories }));
       }
     } catch (error) {
-      console.warn('Failed to persist roommate add:', error);
+      console.warn('Failed to persist friend add:', error);
     }
   };
+
+  // Backward compatibility alias
+  const handleAddRoommate = handleAddFriend;
 
   const handleRemoveExpense = (id?: number) => {
     if (!id || !user) return;
@@ -513,12 +535,15 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     ]);
   };
 
-  const handleRemoveRoommate = (mate: string) => {
-    Alert.alert('Confirm Delete', 'Are you sure you want to remove this roommate? This will affect expense calculations.', [
+  const handleRemoveFriend = (mate: string) => {
+    Alert.alert('Confirm Delete', 'Are you sure you want to remove this friend? This will affect expense calculations.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', onPress: async () => { const updatedRoommates = roommates.filter(roommate => roommate !== mate); setRoommates(updatedRoommates); try { if (user) { const userDocRef = doc(db!, 'users', user.uid); await setDoc(userDocRef, { roommates: updatedRoommates, updatedAt: new Date() }, { merge: true }); await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: updatedRoommates, categories })); } } catch (error) { console.warn('Failed to persist roommate removal:', error); } }, style: 'destructive' },
+      { text: 'Remove', onPress: async () => { const updatedFriends = friends.filter(friend => friend !== mate); setFriends(updatedFriends); try { if (user) { const userDocRef = doc(db!, 'users', user.uid); await setDoc(userDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true }); await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: updatedFriends, categories })); } } catch (error) { console.warn('Failed to persist friend removal:', error); } }, style: 'destructive' },
     ]);
   };
+
+  // Backward compatibility alias
+  const handleRemoveRoommate = handleRemoveFriend;
 
   const handleSplitWithChange = (mate: string) => {
     const updatedSplitWith = [...newExpense.splitWith];
@@ -558,8 +583,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         stats.highest = { amount: amount, description: expense.description };
       }
     });
-    if (roommates.length > 0) {
-      stats.averagePerRoommate = stats.total / roommates.length;
+    if (friends.length > 0) {
+      stats.averagePerRoommate = stats.total / friends.length;
     }
     return stats;
   };
@@ -576,10 +601,21 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setExpenses,
         newExpense,
         setNewExpense,
-        roommates,
-        setRoommates,
-        newRoommate,
-        setNewRoommate,
+        // New naming convention
+        friends,
+        setFriends,
+        newFriend,
+        setNewFriend,
+        handleAddFriend,
+        handleRemoveFriend,
+        // Backward compatibility aliases
+        roommates: friends,
+        setRoommates: setFriends,
+        newRoommate: newFriend,
+        setNewRoommate: setNewFriend,
+        handleAddRoommate,
+        handleRemoveRoommate,
+        
         summaryData,
         settlements,
         categories,
@@ -599,9 +635,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setNewCategoryName,
         getFilteredExpenses,
         handleAddExpense,
-        handleAddRoommate,
         handleRemoveExpense,
-        handleRemoveRoommate,
         handleSplitWithChange,
         openDatePicker,
         updateDateRange,

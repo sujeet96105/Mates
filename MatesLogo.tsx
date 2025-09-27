@@ -1,18 +1,18 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-interface MatesLogoProps {
+interface BillBuddyLogoProps {
   size?: number;
   showText?: boolean;
 }
 
-const MatesLogo: React.FC<MatesLogoProps> = ({ size = 80, showText = true }) => {
+const BillBuddyLogo: React.FC<BillBuddyLogoProps> = ({ size = 80, showText = true }) => {
   return (
     <View style={styles.container}>
-      {/* Mates Text Only */}
+      {/* Bill Buddy Text */}
       {showText && (
-        <Text style={[styles.matesText, { fontSize: size * 0.4 }]}>
-          Mates
+        <Text style={[styles.logoText, { fontSize: size * 0.4 }]}>
+          Bill Buddy
         </Text>
       )}
     </View>
@@ -25,11 +25,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
   },
-  matesText: {
+  logoText: {
     color: '#3B82F6', // Blue
     fontWeight: 'bold',
     textAlign: 'center',
   },
 });
 
-export default MatesLogo;
+export default BillBuddyLogo;

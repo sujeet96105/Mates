@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
 import { useAppState } from './AppStateProvider';
 import { useTheme } from './useTheme';
+import { ModernButton, ModernCard, ModernInput, Icons } from './ModernUI';
 
 const RoommatesTab = () => {
   const {
@@ -17,17 +18,76 @@ const RoommatesTab = () => {
   const { isDarkMode, colors } = useTheme();
 
   const styles = StyleSheet.create({
-    tabContent: { padding: 16, flex: 1 },
-    card: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
-    cardTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 12 },
-    roommateInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 12, backgroundColor: isDarkMode ? colors.buttonSecondary : colors.surface, color: colors.text },
-    addButton: { backgroundColor: colors.primary, padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-    addButtonText: { color: isDarkMode ? colors.text : '#FFFFFF', fontWeight: '600', fontSize: 16 },
-    roommateItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
-    roommateName: { fontSize: 16, color: colors.text },
-    deleteButton: { alignSelf: 'flex-start', padding: 6, marginTop: 8 },
-    deleteButtonText: { color: colors.error, fontSize: 14, fontWeight: '500' },
-    emptyMessage: { textAlign: 'center', padding: 16, color: colors.textSecondary },
+    tabContent: { padding: 20, flex: 1, backgroundColor: colors.backgroundSecondary },
+    card: { 
+      backgroundColor: colors.card, 
+      borderRadius: 16, 
+      padding: 20, 
+      marginBottom: 20, 
+      shadowColor: colors.shadow, 
+      shadowOffset: { width: 0, height: 4 }, 
+      shadowOpacity: 0.1, 
+      shadowRadius: 8, 
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.borderLight
+    },
+    cardTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 16, letterSpacing: -0.3 },
+    friendInput: { 
+      borderWidth: 1, 
+      borderColor: colors.border, 
+      borderRadius: 12, 
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginBottom: 16, 
+      backgroundColor: colors.surface, 
+      color: colors.text,
+      fontSize: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1
+    },
+    addButton: { 
+      backgroundColor: colors.primary, 
+      paddingVertical: 16,
+      paddingHorizontal: 24,
+      borderRadius: 12, 
+      alignItems: 'center', 
+      marginTop: 8,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 4
+    },
+    addButtonText: { color: colors.textOnPrimary, fontWeight: '600', fontSize: 16, letterSpacing: 0.5 },
+    friendItem: { 
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'center'
+    },
+    friendName: { fontSize: 16, color: colors.text, fontWeight: '600', flex: 1 },
+    deleteButton: { 
+      paddingVertical: 8, 
+      paddingHorizontal: 12, 
+      backgroundColor: colors.errorLight, 
+      borderRadius: 8 
+    },
+    deleteButtonText: { color: colors.error, fontSize: 14, fontWeight: '600' },
+    emptyMessage: { textAlign: 'center', padding: 24, color: colors.textSecondary, fontSize: 16, fontWeight: '500' },
   });
 
   return (
@@ -36,33 +96,45 @@ const RoommatesTab = () => {
       data={roommates}
       keyExtractor={(item, index) => index.toString()}
       ListHeaderComponent={
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Add New Roommate</Text>
-          <TextInput
-            style={styles.roommateInput}
-            placeholder="Roommate Name"
-            placeholderTextColor={colors.textPlaceholder}
+        <ModernCard style={{ marginBottom: 20 }}>
+          <Text style={styles.cardTitle}>👥 Add New Friend</Text>
+          <ModernInput
             value={newRoommate}
             onChangeText={setNewRoommate}
+            placeholder="Enter friend's name"
+            leftIcon={<Icons.User />}
           />
-          <TouchableOpacity style={styles.addButton} onPress={handleAddRoommate}>
-            <Text style={styles.addButtonText}>Add Roommate</Text>
-          </TouchableOpacity>
-        </View>
+          <ModernButton
+            title="Add Friend"
+            onPress={handleAddRoommate}
+            variant="primary"
+            fullWidth
+            leftIcon={<Icons.Add />}
+            style={{ marginTop: 12 }}
+          />
+        </ModernCard>
       }
       renderItem={({ item }) => (
-        <View style={styles.roommateItem}>
-          <Text style={styles.roommateName}>{item}</Text>
-          <TouchableOpacity
+        <View style={styles.friendItem}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Icons.User />
+            <Text style={[styles.friendName, { marginLeft: 12 }]}>{item}</Text>
+          </View>
+          <ModernButton
+            title="Remove"
             onPress={() => handleRemoveRoommate(item)}
-            style={styles.deleteButton}
-          >
-            <Text style={styles.deleteButtonText}>Remove</Text>
-          </TouchableOpacity>
+            variant="error"
+            size="small"
+            leftIcon={<Icons.Remove />}
+          />
         </View>
       )}
       ListEmptyComponent={
-        <Text style={styles.emptyMessage}>No roommates added yet</Text>
+        <ModernCard style={{ alignItems: 'center', padding: 40 }}>
+          <Text style={{ fontSize: 40, marginBottom: 16 }}>👥</Text>
+          <Text style={styles.emptyMessage}>No friends added yet</Text>
+          <Text style={[styles.emptyMessage, { fontSize: 14, marginTop: 8 }]}>Add friends to start splitting expenses!</Text>
+        </ModernCard>
       }
       contentContainerStyle={{ paddingBottom: 20 }}
       showsVerticalScrollIndicator={true}

@@ -1,6 +1,26 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Query for MANAGE_EXTERNAL_STORAGE intent on Android 11+ -->
+    <queries>
+        <intent>
+            <action android:name="android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION" />
+        </intent>
+    </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- Storage permissions for different Android versions -->
+    <!-- For Android 6.0-10 (API 23-29) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="32" />
+    
+    <!-- For Android 11+ (API 30+) - MediaStore API doesn't require special permissions for Downloads -->
+    <!-- But we keep this for legacy fallback cases -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" 
+        tools:ignore="ScopedStorage" />
 
     <application
       android:name=".MainApplication"
@@ -10,6 +30,11 @@
       android:allowBackup="false"
       android:theme="@style/AppTheme"
       android:supportsRtl="true">
+      <!-- AdMob App ID meta-data (use test ID during development) -->
+      <meta-data
+        android:name="com.google.android.gms.ads.APPLICATION_ID"
+        android:value="ca-app-pub-6638172524607879~4893085945"
+        tools:replace="android:value" />
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"

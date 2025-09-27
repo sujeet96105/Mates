@@ -1,6 +1,6 @@
 
-import { useState, useEffect, useRef } from 'react';
-import { View, Text } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, Animated } from 'react-native';
 import { GestureHandlerRootView, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import {
   StatusBar,
@@ -14,9 +14,13 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
+// import LinearGradient from 'react-native-linear-gradient'; // Will add this dependency later
 import { AppStateProvider, useAppState } from './AppStateProvider';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
+import { ModernButton, ModernCard, ModernHeader, ModernTab, Icons } from './ModernUI';
+import mobileAds, { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { ANDROID_BANNER_AD_UNIT_ID } from './adConfig';
 import ExpensesTab from './ExpensesTab';
 import RoommatesTab from './RoommatesTab';
 import SummaryTab from './SummaryTab';
@@ -24,6 +28,8 @@ import FinancialInsightsTab from './FinancialInsightsTab';
 import SettingsTab from './SettingsTab';
 import { AuthContainer } from './AuthScreens';
 import UserProfile from './UserProfile';
+import { shouldRequestStoragePermission, requestStoragePermissionInApp } from './pdfExport_clean';
+import './testFileSaver'; // Import test file to run FileSaver tests in development
 
 // Define our interfaces
 interface Expense {
@@ -96,15 +102,17 @@ function AppWithAuth() {
     },
     loadingText: {
       color: colors.text,
-      marginTop: 16
+      marginTop: 16,
+      fontSize: 16,
+      fontWeight: '500'
     }
   });
   
   if (authLoading) {
     return (
-      <View style={authStyles.container}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={authStyles.loadingText}>Loading...</Text>
+      <View style={[authStyles.container, { backgroundColor: colors.primary }]}>
+        <ActivityIndicator size="large" color={colors.textOnPrimary} />
+        <Text style={[authStyles.loadingText, { color: colors.textOnPrimary }]}>Loading...</Text>
       </View>
     );
   }
@@ -149,24 +157,47 @@ function MainAppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // Initialize AdMob once
+  useEffect(() => {
+    mobileAds().initialize().catch(() => {});
+  }, []);
+
+  // Check for storage permissions on app launch (like WhatsApp does)
+  useEffect(() => {
+    const checkStoragePermissionsOnLaunch = async () => {
+      try {
+        const needsPermission = await shouldRequestStoragePermission();
+        if (needsPermission) {
+          // Wait a bit for the app to fully load, then show permission request
+          setTimeout(async () => {
+            const granted = await requestStoragePermissionInApp();
+            console.log('Storage permission granted on launch:', granted);
+          }, 2000); // 2 second delay like WhatsApp
+        }
+      } catch (error) {
+        console.log('Error checking permissions on launch:', error);
+      }
+    };
+
+    checkStoragePermissionsOnLaunch();
+  }, []);
+
   // Base background style
   const backgroundStyle = {
     backgroundColor: colors.background,
     flex: 1,
   };
 
-  // Create the styles inside the component
+  // Create the modern styles inside the component
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.background,
     },
     header: {
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.surface,
+      paddingVertical: 20,
+      paddingHorizontal: 20,
+      backgroundColor: 'transparent',
     },
     headerContent: {
       flexDirection: 'row',
@@ -175,28 +206,37 @@ function MainAppContent() {
       flexWrap: 'nowrap',
     },
     headerTitle: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      color: colors.primary,
+      fontSize: 28,
+      fontWeight: '700',
+      color: colors.text,
+      opacity: 0.9,
       flexShrink: 1,
       flexWrap: 'wrap',
-      maxWidth: '60%',
+      maxWidth: '80%',
+      letterSpacing: -0.5,
     },
     headerSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       color: colors.textSecondary,
+      fontWeight: '500',
+      marginTop: 2,
     },
     welcomeText: {
       fontSize: 14,
-      color: colors.textSecondary,
-      marginTop: 4,
-      fontStyle: 'italic',
+      color: colors.textTertiary,
+      marginTop: 8,
+      fontWeight: '600',
     },
     logoutButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
       backgroundColor: colors.buttonSecondary,
-      borderRadius: 6,
+      borderRadius: 20,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
     },
     logoutText: {
       color: colors.text,
@@ -207,47 +247,71 @@ function MainAppContent() {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      minWidth: 130,
+      minWidth: 72,
       justifyContent: 'flex-end',
       flexShrink: 0,
     },
     profileButton: {
-      padding: 6,
-      backgroundColor: colors.buttonSecondary,
-      borderRadius: 16,
-      marginRight: 6,
+      padding: 10,
+      backgroundColor: colors.primary,
+      borderRadius: 20,
+      marginRight: 8,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 3,
     },
     profileEmoji: {
       fontSize: 16,
+      color: colors.textOnPrimary,
     },
     tabBar: {
       flexDirection: 'row',
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
       backgroundColor: colors.surface,
-      flexWrap: 'wrap',
-      justifyContent: 'space-around',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      marginHorizontal: 16,
+      marginBottom: 16,
+      borderRadius: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
+      overflow: 'hidden',
+    },
+    tabScrollContent: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: 4,
+      paddingRight: 4,
     },
     tabButton: {
-      minWidth: 80,
+      flex: 1,
       paddingVertical: 12,
-      paddingHorizontal: 8,
+      paddingHorizontal: 12,
       alignItems: 'center',
-      flexShrink: 1,
+      justifyContent: 'center',
+      borderRadius: 12,
+      marginHorizontal: 2,
     },
     activeTab: {
-      borderBottomWidth: 3,
-      borderBottomColor: colors.primary,
-      backgroundColor: colors.buttonSecondary,
+      backgroundColor: colors.primary,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 3,
     },
     tabText: {
       color: colors.textSecondary,
-      fontSize: 13,
+      fontSize: 14,
       textAlign: 'center',
-      flexWrap: 'wrap',
+      fontWeight: '500',
     },
     activeTabText: {
-      color: colors.primary,
+      color: colors.textOnPrimary,
       fontWeight: '600',
     },
     tabContent: {
@@ -256,29 +320,39 @@ function MainAppContent() {
     },
     card: {
       backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: 16,
+      padding: 20,
       marginBottom: 16,
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 4,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
     },
     cardTitle: {
-      fontSize: 18,
-      fontWeight: '600',
+      fontSize: 20,
+      fontWeight: '700',
       color: colors.text,
-      marginBottom: 12,
+      marginBottom: 16,
+      letterSpacing: -0.3,
     },
     input: {
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 8,
-      padding: 12,
-      marginBottom: 12,
+      borderRadius: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginBottom: 16,
       backgroundColor: colors.surface,
       color: colors.text,
+      fontSize: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
     },
     label: {
       fontSize: 14,
@@ -314,15 +388,22 @@ function MainAppContent() {
     },
     addButton: {
       backgroundColor: colors.buttonPrimary,
-      padding: 14,
-      borderRadius: 8,
+      paddingVertical: 16,
+      paddingHorizontal: 24,
+      borderRadius: 12,
       alignItems: 'center',
-      marginTop: 8,
+      marginTop: 12,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 4,
     },
     addButtonText: {
-      color: 'white',
+      color: colors.textOnPrimary,
       fontWeight: '600',
       fontSize: 16,
+      letterSpacing: 0.5,
     },
     emptyMessage: {
       textAlign: 'center',
@@ -330,10 +411,17 @@ function MainAppContent() {
       color: colors.textSecondary,
     },
     expenseItem: {
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderLight,
-      paddingVertical: 12,
-      marginBottom: 8,
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
     },
     expenseHeader: {
       flexDirection: 'row',
@@ -499,17 +587,23 @@ function MainAppContent() {
       alignItems: 'center',
     },
     modalContent: {
-      width: '80%',
+      width: '85%',
       backgroundColor: colors.card,
-      borderRadius: 10,
-      padding: 20,
+      borderRadius: 20,
+      padding: 24,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.2,
+      shadowRadius: 16,
+      elevation: 8,
     },
     modalTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      marginBottom: 15,
+      fontSize: 20,
+      fontWeight: '700',
+      marginBottom: 20,
       color: colors.text,
       textAlign: 'center',
+      letterSpacing: -0.3,
     },
     modalButtons: {
       flexDirection: 'row',
@@ -633,56 +727,58 @@ function MainAppContent() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={backgroundStyle}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit>Roommate Expense Tracker</Text>
-            <Text style={styles.headerSubtitle}>Track and manage shared expenses</Text>
+            <Text
+              style={styles.headerTitle}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+              ellipsizeMode="tail"
+            >
+              ₹ Bill Buddy
+            </Text>
+            <Text style={styles.headerSubtitle}>Split bills. Stay buddies.</Text>
+            {user && (
+              <Text style={styles.welcomeText}>Welcome back, {user.displayName?.split(' ')[0] || 'Friend'}! 👋</Text>
+            )}
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity onPress={() => setShowProfileModal(true)} style={styles.profileButton}>
-              <Text style={styles.profileEmoji}>👤</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-              <Text style={styles.logoutText}>Logout</Text>
+              <Icons.User />
             </TouchableOpacity>
           </View>
         </View>
-        {user && (
-          <Text style={styles.welcomeText}>Welcome, {user.displayName || user.email}</Text>
-        )}
       </View>
       <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'expenses' && styles.activeTab]}
-          onPress={() => handleTabChange('expenses')}>
-          <Text style={[styles.tabText, activeTab === 'expenses' && styles.activeTabText]}>
-            Expenses
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'roommates' && styles.activeTab]}
-          onPress={() => handleTabChange('roommates')}>
-          <Text style={[styles.tabText, activeTab === 'roommates' && styles.activeTabText]}>
-            Roommates
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'summary' && styles.activeTab]}
-          onPress={() => handleTabChange('summary')}>
-          <Text style={[styles.tabText, activeTab === 'summary' && styles.activeTabText]}>
-            Summary
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'financialInsights' && styles.activeTab]}
-          onPress={() => handleTabChange('financialInsights')}>
-          <Text style={[styles.tabText, activeTab === 'financialInsights' && styles.activeTabText]}>
-            Insights
-          </Text>
-        </TouchableOpacity>
-        {null}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabScrollContent}
+        >
+          <ModernTab
+            title="Expenses"
+            isActive={activeTab === 'expenses'}
+            onPress={() => handleTabChange('expenses')}
+          />
+          <ModernTab
+            title="Friends"
+            isActive={activeTab === 'roommates'}
+            onPress={() => handleTabChange('roommates')}
+          />
+          <ModernTab
+            title="Summary"
+            isActive={activeTab === 'summary'}
+            onPress={() => handleTabChange('summary')}
+          />
+          <ModernTab
+            title="Insights"
+            isActive={activeTab === 'financialInsights'}
+            onPress={() => handleTabChange('financialInsights')}
+          />
+        </ScrollView>
       </View>
       <GHScrollView
         ref={scrollRef}
@@ -714,7 +810,10 @@ function MainAppContent() {
           <FinancialInsightsTab />
         </View>
       </GHScrollView>
-      {null}
+      {/* AdMob banner below tabs */}
+      <View style={{ alignItems: 'center', backgroundColor: colors.surface, paddingVertical: 4 }}>
+        <BannerAd unitId={ANDROID_BANNER_AD_UNIT_ID} size={BannerAdSize.BANNER} />
+      </View>
       <Modal
         animationType="slide"
         transparent={false}

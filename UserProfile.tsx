@@ -4,7 +4,7 @@ import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
 
 const UserProfile: React.FC = () => {
-  const { user, updateProfile, error } = useAuth();
+  const { user, updateProfile, error, logout } = useAuth();
   const { isDarkMode, colors } = useTheme();
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,7 +40,7 @@ const UserProfile: React.FC = () => {
       
       <View style={stylesBase.infoContainer}>
         <Text style={[stylesBase.label, { color: colors.textSecondary }]}>Email:</Text>
-        <Text style={[stylesBase.value, { color: colors.text }]}>{user.email}</Text>
+        <Text style={[stylesBase.value, { color: colors.text }]}>{user?.email}</Text>
       </View>
 
       <View style={stylesBase.inputContainer}>
@@ -70,6 +70,13 @@ const UserProfile: React.FC = () => {
         ) : (
           <Text style={[stylesBase.buttonText, { color: isDarkMode ? colors.surface : '#FFFFFF' }]}>Update Profile</Text>
         )}
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[stylesBase.button, { backgroundColor: colors.buttonSecondary }]} 
+        onPress={() => logout()}
+      >
+        <Text style={[stylesBase.buttonText, { color: colors.text }]}>Logout</Text>
       </TouchableOpacity>
     </View>
   );

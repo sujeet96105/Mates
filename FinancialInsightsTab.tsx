@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useAppState } from './AppStateProvider';
 import { useTheme } from './useTheme';
+import { ModernCard, ModernButton, Icons } from './ModernUI';
 
 const FinancialInsightsTab = () => {
   const { settlements, generateExpenseStats } = useAppState();
@@ -11,56 +12,72 @@ const FinancialInsightsTab = () => {
   const expenseStats = generateExpenseStats();
 
   const styles = StyleSheet.create({
-    tabContent: { 
-      padding: 16, 
-      flex: 1 
+    tabContent: {
+      padding: 20,
+      flex: 1,
+      backgroundColor: colors.backgroundSecondary,
     },
     sectionToggle: {
       flexDirection: 'row',
-      backgroundColor: colors.card,
-      borderRadius: 8,
-      marginBottom: 16,
-      overflow: 'hidden',
-      width: '100%',
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      marginBottom: 20,
+      padding: 6,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
     },
     sectionButton: {
       flex: 1,
       paddingVertical: 10,
       alignItems: 'center',
       minWidth: 100,
+      borderRadius: 12,
     },
     activeSection: {
       backgroundColor: colors.primary,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
     },
     sectionText: {
       color: colors.textSecondary,
-      fontWeight: '500',
+      fontWeight: '600',
     },
     activeSectionText: {
-      color: isDarkMode ? colors.text : '#FFFFFF',
+      color: colors.textOnPrimary,
     },
     // Statistics styles
-    card: { 
-      backgroundColor: colors.card, 
-      borderRadius: 12, 
-      padding: 16, 
-      marginBottom: 16, 
-      shadowColor: colors.shadow, 
-      shadowOffset: { width: 0, height: 2 }, 
-      shadowOpacity: 0.2, 
-      shadowRadius: 4, 
-      elevation: 4 
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: 20,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
     },
-    cardTitle: { 
-      fontSize: 18, 
-      fontWeight: '600', 
-      color: colors.text, 
-      marginBottom: 12 
+    cardTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 16,
+      letterSpacing: -0.3,
     },
     statRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingVertical: 8,
+      paddingVertical: 10,
       borderBottomWidth: 1,
       borderBottomColor: colors.borderLight,
       flexWrap: 'wrap',
@@ -70,10 +87,11 @@ const FinancialInsightsTab = () => {
       color: colors.textSecondary,
       flex: 1,
       marginRight: 8,
+      fontWeight: '500',
     },
     statValue: {
-      fontSize: 14,
-      fontWeight: '600',
+      fontSize: 16,
+      fontWeight: '700',
       color: colors.text,
       textAlign: 'right',
       flexShrink: 1,
@@ -86,26 +104,27 @@ const FinancialInsightsTab = () => {
     },
     debtorName: {
       color: colors.error,
-      fontWeight: '600',
+      fontWeight: '700',
     },
     creditorName: {
       color: colors.success,
-      fontWeight: '600',
+      fontWeight: '700',
     },
     settlementAmount: {
       color: colors.primary,
-      fontWeight: '600',
+      fontWeight: '700',
     },
     emptyMessage: {
       color: colors.textSecondary,
-      fontStyle: 'italic',
       textAlign: 'center',
       marginTop: 24,
+      fontSize: 16,
+      fontWeight: '500',
     },
   });
 
   const renderStatistics = () => (
-    <View style={styles.card}>
+    <ModernCard style={styles.card}>
       <Text style={styles.cardTitle}>Expense Statistics</Text>
       {expenseStats.total > 0 ? (
         <>
@@ -119,29 +138,15 @@ const FinancialInsightsTab = () => {
               ₹{expenseStats.highest.amount.toFixed(2)} - {expenseStats.highest.description}
             </Text>
           </View>
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Average Per Roommate:</Text>
-            <Text style={styles.statValue}>₹{expenseStats.averagePerRoommate.toFixed(2)}</Text>
-          </View>
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Categories:</Text>
-            <View style={{flex: 1}}>
-              {Object.keys(expenseStats.byCategory).map((category) => (
-                <Text key={category} style={[styles.statValue, {textAlign: 'left', marginTop: 2}]}>
-                  {category}: ₹{expenseStats.byCategory[category].toFixed(2)}
-                </Text>
-              ))}
-            </View>
-          </View>
         </>
       ) : (
         <Text style={styles.emptyMessage}>No expenses to analyze yet.</Text>
       )}
-    </View>
+    </ModernCard>
   );
 
   const renderSettlements = () => (
-    <View style={styles.card}>
+    <ModernCard style={styles.card}>
       <Text style={styles.cardTitle}>Settlements</Text>
       {settlements.length > 0 ? (
         settlements.map((item) => {
@@ -162,7 +167,7 @@ const FinancialInsightsTab = () => {
       ) : (
         <Text style={styles.emptyMessage}>No settlements needed at this time</Text>
       )}
-    </View>
+    </ModernCard>
   );
 
   return (

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
-import MatesLogo from './MatesLogo';
+import BillBuddyLogo from './MatesLogo';
 
 // Login Screen Component
 export const LoginScreen: React.FC<{ onForgotPassword: () => void }> = ({ onForgotPassword }) => {
@@ -41,7 +41,7 @@ export const LoginScreen: React.FC<{ onForgotPassword: () => void }> = ({ onForg
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.formContainer}>
-          <MatesLogo size={100} showText={true} />
+          <BillBuddyLogo size={100} showText={true} />
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
 
@@ -130,7 +130,7 @@ export const RegisterScreen: React.FC = () => {
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.formContainer}>
-          <MatesLogo size={100} showText={true} />
+          <BillBuddyLogo size={100} showText={true} />
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Sign up to get started</Text>
 
