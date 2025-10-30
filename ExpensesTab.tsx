@@ -33,6 +33,11 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     setTabsScrollEnabled,
     expenses,
     settlements,
+    sessions,
+    activeSessionId,
+    setActiveSessionId,
+    insertSession,
+    deleteSession,
   } = useAppState();
 
   // Use our custom theme hook for consistent theming
@@ -71,6 +76,11 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
   }, []);
   const [customCategoryText, setCustomCategoryText] = useState('');
   const [showCategorySelector, setShowCategorySelector] = useState(false);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [newSessionName, setNewSessionName] = useState('');
+  const [newSessionType, setNewSessionType] = useState<'Personal' | 'Trip'>('Personal');
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [isDeletingSessionId, setIsDeletingSessionId] = useState<string | null>(null);
 
   const styles = StyleSheet.create({
     tabContent: { padding: 20, flex: 1, backgroundColor: colors.backgroundSecondary },
@@ -210,6 +220,20 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
       fontSize: 16,
       color: colors.text,
     },
+    sessionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    sessionBadge: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.borderLight },
+    sessionActions: { flexDirection: 'row' },
+    sessionBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginLeft: 8 },
+    sessionBtnText: { color: colors.text, fontWeight: '600' },
+    modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+    modalCard: { width: '92%', backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.borderLight },
+    modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 12 },
+    modalRow: { flexDirection: 'row', marginTop: 8 },
+    typeChip: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginRight: 8, backgroundColor: colors.surface },
+    typeChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+    typeChipText: { color: colors.text, fontWeight: '600' },
+    typeChipTextSelected: { color: colors.textOnPrimary },
+    modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 },
     expenseItem: { 
       backgroundColor: colors.surface,
       borderRadius: 12,
@@ -324,6 +348,24 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
         <>
           {/* Filter Section */}
           <View style={styles.filterContainer}>
+            <View style={styles.sessionHeader}>
+              <View>
+                <Text style={styles.filterTitle}>Active Session</Text>
+                <View style={styles.sessionBadge}>
+                  <Text style={{ color: colors.text, fontWeight: '600' }}>
+                    {sessions.find(s => s.sessionId === activeSessionId)?.sessionName || 'Not set'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.sessionActions}>
+                <TouchableOpacity style={styles.sessionBtn} onPress={() => setShowSessionModal(true)}>
+                  <Text style={styles.sessionBtnText}>Change</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sessionBtn} onPress={() => { setNewSessionName(''); setNewSessionType('Personal'); setShowSessionModal(true); }}>
+                  <Text style={styles.sessionBtnText}>New</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
             <Text style={styles.filterTitle}>Filter Expenses</Text>
             {/* Category Filter */}
             <Text style={styles.label}>Category:</Text>
@@ -495,6 +537,99 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
               </View>
             </GHScrollView>
           </View>
+          {/* Session chooser / creator modal */}
+          <Modal transparent visible={showSessionModal} animationType="fade" onRequestClose={() => setShowSessionModal(false)}>
+            <View style={styles.modalBg}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Select or Create Session</Text>
+                <View style={{ maxHeight: 200, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, overflow: 'hidden' }}>
+                  <ScrollView>
+                    {sessions.length === 0 ? (
+                      <Text style={{ color: colors.textSecondary, padding: 12 }}>No sessions yet</Text>
+                    ) : (
+                      sessions.map(s => (
+                        <View key={s.sessionId} style={[styles.pickerItem, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                          <TouchableOpacity onPress={async () => { setActiveSessionId(s.sessionId); setShowSessionModal(false); }}>
+                            <Text style={styles.pickerItemText}>{s.sessionName} ({s.sessionType})</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => {
+                              Alert.alert(
+                                'Delete Session',
+                                'This will delete the session and all its expenses. Continue?',
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { text: 'Delete', style: 'destructive', onPress: async () => {
+                                    if (isDeletingSessionId) return;
+                                    try {
+                                      setIsDeletingSessionId(s.sessionId);
+                                      const ok = await deleteSession(s.sessionId);
+                                      if (!ok) Alert.alert('Failed', 'Could not delete session.');
+                                    } finally {
+                                      setIsDeletingSessionId(null);
+                                    }
+                                  } }
+                                ]
+                              );
+                            }}
+                            disabled={isDeletingSessionId === s.sessionId}
+                          >
+                            <Text style={{ color: colors.error }}>{isDeletingSessionId === s.sessionId ? 'Deleting…' : 'Delete'}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))
+                    )}
+                  </ScrollView>
+                </View>
+                <Text style={[styles.label, { marginTop: 12 }]}>New Session</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Session name (e.g., Trip to Goa)"
+                  placeholderTextColor={colors.textPlaceholder}
+                  value={newSessionName}
+                  onChangeText={setNewSessionName}
+                />
+                <View style={styles.modalRow}>
+                  {(['Personal','Trip'] as const).map(t => (
+                    <TouchableOpacity key={t} style={[styles.typeChip, newSessionType === t && styles.typeChipSelected]} onPress={() => setNewSessionType(t)}>
+                      <Text style={[styles.typeChipText, newSessionType === t && styles.typeChipTextSelected]}>{t}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.sessionBtn} onPress={() => setShowSessionModal(false)}>
+                    <Text style={styles.sessionBtnText}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.sessionBtn, { borderColor: colors.primary, opacity: isCreatingSession ? 0.6 : 1 }]}
+                    onPress={async () => {
+                      if (isCreatingSession) return;
+                      const name = newSessionName.trim();
+                      if (!name) {
+                        Alert.alert('Name required', 'Please enter a session name.');
+                        return;
+                      }
+                      try {
+                        setIsCreatingSession(true);
+                        const id = await insertSession(name, newSessionType);
+                        if (id) {
+                          setShowSessionModal(false);
+                          setNewSessionName('');
+                          setNewSessionType('Personal');
+                        } else {
+                          Alert.alert('Failed', 'Could not create session. Please try again.');
+                        }
+                      } finally {
+                        setIsCreatingSession(false);
+                      }
+                    }}
+                  >
+                    <Text style={[styles.sessionBtnText]}>{isCreatingSession ? 'Creating…' : 'Create'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
           {/* Add Expense Form */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Add New Expense</Text>

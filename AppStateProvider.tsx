@@ -21,6 +21,7 @@ interface Expense {
   userId?: string;
   firestoreId?: string;
   createdAt?: number;
+  sessionId?: string;
 }
 
 interface Balance {
@@ -50,6 +51,15 @@ const DEFAULT_CATEGORIES = [
   'Entertainment',
   'Other',
 ];
+
+// Expense sessions
+interface ExpenseSession {
+  sessionId: string; // Firestore document ID
+  sessionName: string;
+  sessionType: string; // e.g., Personal, Trip
+  createdDate: number; // epoch millis
+  userId: string;
+}
 
 // Context value type
 interface AppStateContextType {
@@ -103,6 +113,14 @@ interface AppStateContextType {
   updateDateRange: (date: string) => void;
   confirmAddCategory: () => void;
   generateExpenseStats: () => any;
+  // Sessions
+  sessions: ExpenseSession[];
+  activeSessionId: string | null;
+  setActiveSessionId: React.Dispatch<React.SetStateAction<string | null>>;
+  insertSession: (sessionName: string, sessionType: string) => Promise<string | null>;
+  getAllSessions: () => ExpenseSession[];
+  getExpensesBySession: (sessionId: string) => Expense[];
+  deleteSession: (sessionId: string) => Promise<boolean>;
 }
 
 const AppStateContext = createContext<AppStateContextType | undefined>(undefined);
@@ -150,10 +168,23 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
+  // Sessions state
+  const [sessions, setSessions] = useState<ExpenseSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  // Persist active session when it changes
+  useEffect(() => {
+    if (user && activeSessionId) {
+      AsyncStorage.setItem(`mates:user:${user.uid}:activeSessionId`, activeSessionId).catch(() => {});
+    }
+  }, [activeSessionId, user]);
+
   // Load data and subscribe to realtime expenses when user changes
   useEffect(() => {
     let unsubscribeExpenses: (() => void) | undefined;
     let unsubscribeUserDoc: (() => void) | undefined;
+    let unsubscribeSessions: (() => void) | undefined;
+    let unsubscribeActiveSessionDoc: (() => void) | undefined;
     const loadData = async () => {
       if (!user) {
         setIsLoading(false);
@@ -208,13 +239,11 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           unsubscribeUserDoc = onSnapshot(userDocRef, (docSnapshot) => {
             const data = docSnapshot.data();
             if (data) {
-              const nextRoommates = Array.isArray(data.roommates) ? data.roommates : undefined;
               const nextCategories = Array.isArray(data.categories) ? data.categories : undefined;
-          if (nextRoommates && !arraysEqual(nextRoommates, friends)) setFriends(nextRoommates);
               if (nextCategories && !arraysEqual(nextCategories, categories)) setCategories(nextCategories);
               // Cache locally
               AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({
-                roommates: nextRoommates ?? [],
+                roommates: (data as any).roommates ?? [],
                 categories: nextCategories ?? DEFAULT_CATEGORIES,
               })).catch(() => {});
             }
@@ -222,10 +251,68 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             console.warn('[Firestore] User doc listener error:', err);
           });
 
-          // Realtime expenses subscription
-          const expensesQuery = query(collection(db!, 'expenses'), where('userId', '==', user.uid));
+          // Load active session from storage
+          try {
+            const savedActive = await AsyncStorage.getItem(`mates:user:${user.uid}:activeSessionId`);
+            if (savedActive) {
+              setActiveSessionId(savedActive);
+            }
+          } catch {}
+
+          // Subscribe to sessions for this user
+          const sessionsQueryRef = query(collection(db!, 'users', user.uid, 'sessions'));
+          unsubscribeSessions = onSnapshot(sessionsQueryRef, async (snapshot) => {
+            const nextSessions: ExpenseSession[] = snapshot.docs.map(d => {
+              const data = d.data() as any;
+              return {
+                sessionId: d.id,
+                sessionName: data.sessionName || 'Session',
+                sessionType: data.sessionType || 'Personal',
+                createdDate: typeof data.createdDate === 'number' ? data.createdDate : Date.now(),
+                userId: data.userId,
+              };
+            });
+            setSessions(nextSessions);
+            // Ensure there is always an active session
+            if (!activeSessionId) {
+              const existing = nextSessions[0];
+              if (existing) {
+                setActiveSessionId(existing.sessionId);
+                AsyncStorage.setItem(`mates:user:${user.uid}:activeSessionId`, existing.sessionId).catch(() => {});
+              } else {
+                // Create default session
+                const createdId = await insertSessionInternal('Personal Daily Expenses', 'Personal', user.uid);
+                if (createdId) {
+                  setActiveSessionId(createdId);
+                  AsyncStorage.setItem(`mates:user:${user.uid}:activeSessionId`, createdId).catch(() => {});
+                }
+              }
+            }
+          }, (err) => {
+            console.warn('[Firestore] Sessions listener error:', err);
+          });
+
+          // Subscribe to active session doc for session-scoped friends
+          if (activeSessionId) {
+            const activeSessionDocRef = doc(db!, 'users', user.uid, 'sessions', activeSessionId);
+            unsubscribeActiveSessionDoc = onSnapshot(activeSessionDocRef, async (snap) => {
+              const data = snap.data();
+              const nextRoommates = Array.isArray(data?.roommates) ? (data!.roommates as string[]) : [];
+              setFriends(nextRoommates);
+              await AsyncStorage.setItem(`mates:user:${user.uid}:session:${activeSessionId}:friends`, JSON.stringify(nextRoommates));
+            }, (err) => {
+              console.warn('[Firestore] Active session doc listener error:', err);
+            });
+          }
+
+          // Realtime expenses subscription scoped to active session
+          const expensesQuery = query(
+            collection(db!, 'expenses'),
+            where('userId', '==', user.uid),
+            ...(activeSessionId ? [where('sessionId', '==', activeSessionId)] as any : [])
+          );
           console.log('[Firestore] Subscribing to expenses...');
-          unsubscribeExpenses = onSnapshot(expensesQuery, (snapshot) => {
+          unsubscribeExpenses = onSnapshot(expensesQuery as any, (snapshot) => {
             const expensesData = snapshot.docs.map(docSnapshot => {
               const data = docSnapshot.data();
               return {
@@ -275,6 +362,15 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             createdAt: new Date()
           });
           AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: [], categories: DEFAULT_CATEGORIES })).catch(() => {});
+
+          // Create a default session for brand new users
+          try {
+            const createdId = await insertSessionInternal('Personal Daily Expenses', 'Personal', user.uid);
+            if (createdId) {
+              setActiveSessionId(createdId);
+              AsyncStorage.setItem(`mates:user:${user.uid}:activeSessionId`, createdId).catch(() => {});
+            }
+          } catch {}
         }
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -291,8 +387,14 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (unsubscribeUserDoc) {
         unsubscribeUserDoc();
       }
+      if (unsubscribeSessions) {
+        unsubscribeSessions();
+      }
+      if (unsubscribeActiveSessionDoc) {
+        unsubscribeActiveSessionDoc();
+      }
     };
-  }, [user]);
+  }, [user, activeSessionId]);
 
   // Validate expense data when expenses change
   useEffect(() => {
@@ -429,6 +531,23 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     
     try {
+      // Ensure we have a valid sessionId
+      let sid: string | null = activeSessionId || null;
+      if (!sid) {
+        if (sessions.length > 0) {
+          sid = sessions[0].sessionId;
+          setActiveSessionId(sid);
+        } else {
+          sid = await insertSessionInternal('Personal Daily Expenses', 'Personal', user.uid);
+          if (sid) {
+            setActiveSessionId(sid);
+          }
+        }
+      }
+      if (!sid) {
+        Alert.alert('Session Required', 'Please create or select a session before adding expenses.');
+        return;
+      }
       // Create a new expense document in Firestore
       const expensesCollectionRef = collection(db!, 'expenses');
       const newExpenseRef = doc(expensesCollectionRef);
@@ -437,6 +556,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...newExpense,
         id: Date.now(), // Keep numeric ID for local operations
         userId: user.uid,
+        sessionId: sid,
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString(),
         firestoreId: newExpenseRef.id, // Store Firestore document ID
@@ -452,6 +572,71 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch (error) {
       console.error('Error adding expense:', error);
       Alert.alert('Error', 'Failed to add expense. Please try again.');
+    }
+  };
+
+  // Sessions helpers (DAO-like)
+  const insertSessionInternal = async (sessionName: string, sessionType: string, uid: string): Promise<string | null> => {
+    try {
+      const sessionsCol = collection(db!, 'users', uid, 'sessions');
+      const newDocRef = doc(sessionsCol);
+      const payload: ExpenseSession = {
+        sessionId: newDocRef.id,
+        sessionName,
+        sessionType,
+        createdDate: Date.now(),
+        userId: uid,
+      };
+      await setDoc(newDocRef, payload);
+      return newDocRef.id;
+    } catch (e) {
+      console.error('Failed creating session', e);
+      return null;
+    }
+  };
+
+  const insertSession = async (sessionName: string, sessionType: string): Promise<string | null> => {
+    if (!user) return null;
+    const id = await insertSessionInternal(sessionName, sessionType, user.uid);
+    if (id) {
+      setActiveSessionId(id);
+      AsyncStorage.setItem(`mates:user:${user.uid}:activeSessionId`, id).catch(() => {});
+    }
+    return id;
+  };
+
+  const getAllSessions = () => sessions;
+  const getExpensesBySession = (sessionId: string) => expenses.filter(e => e.sessionId === sessionId);
+
+  const deleteSession = async (sessionId: string): Promise<boolean> => {
+    if (!user) return false;
+    try {
+      // 1) Delete expenses for this session (belonging to this user)
+      const expensesRef = collection(db!, 'expenses');
+      const q = query(expensesRef, where('userId', '==', user.uid), where('sessionId', '==', sessionId));
+      const snap = await getDocs(q);
+      const deletePromises: Promise<any>[] = [];
+      snap.forEach(d => deletePromises.push(deleteDoc(d.ref)));
+      if (deletePromises.length) await Promise.all(deletePromises);
+
+      // 2) Delete the session document
+      const sessionDocRef = doc(db!, 'users', user.uid, 'sessions', sessionId);
+      await deleteDoc(sessionDocRef);
+
+      // 3) If deleting the active session, switch to another one when listener updates
+      if (activeSessionId === sessionId) {
+        const fallback = sessions.find(s => s.sessionId !== sessionId)?.sessionId || null;
+        setActiveSessionId(fallback);
+        if (fallback) {
+          await AsyncStorage.setItem(`mates:user:${user.uid}:activeSessionId`, fallback);
+        } else {
+          await AsyncStorage.removeItem(`mates:user:${user.uid}:activeSessionId`);
+        }
+      }
+      return true;
+    } catch (e) {
+      console.warn('Failed to delete session', e);
+      return false;
     }
   };
 
@@ -478,10 +663,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setFriends(updatedFriends);
     setNewFriend('');
     try {
-      if (user) {
-        const userDocRef = doc(db!, 'users', user.uid);
-        await setDoc(userDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true });
-        await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: updatedFriends, categories }));
+      if (user && activeSessionId) {
+        const sessionDocRef = doc(db!, 'users', user.uid, 'sessions', activeSessionId);
+        await setDoc(sessionDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true });
+        await AsyncStorage.setItem(`mates:user:${user.uid}:session:${activeSessionId}:friends`, JSON.stringify(updatedFriends));
       }
     } catch (error) {
       console.warn('Failed to persist friend add:', error);
@@ -538,7 +723,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const handleRemoveFriend = (mate: string) => {
     Alert.alert('Confirm Delete', 'Are you sure you want to remove this friend? This will affect expense calculations.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', onPress: async () => { const updatedFriends = friends.filter(friend => friend !== mate); setFriends(updatedFriends); try { if (user) { const userDocRef = doc(db!, 'users', user.uid); await setDoc(userDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true }); await AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({ roommates: updatedFriends, categories })); } } catch (error) { console.warn('Failed to persist friend removal:', error); } }, style: 'destructive' },
+      { text: 'Remove', onPress: async () => { const updatedFriends = friends.filter(friend => friend !== mate); setFriends(updatedFriends); try { if (user && activeSessionId) { const sessionDocRef = doc(db!, 'users', user.uid, 'sessions', activeSessionId); await setDoc(sessionDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true }); await AsyncStorage.setItem(`mates:user:${user.uid}:session:${activeSessionId}:friends`, JSON.stringify(updatedFriends)); } } catch (error) { console.warn('Failed to persist friend removal:', error); } }, style: 'destructive' },
     ]);
   };
 
@@ -641,6 +826,14 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateDateRange,
         confirmAddCategory,
         generateExpenseStats,
+        // Sessions
+        sessions,
+        activeSessionId,
+        setActiveSessionId,
+        insertSession,
+        getAllSessions,
+        getExpensesBySession,
+        deleteSession,
       }}
     >
       {children}
