@@ -1,7 +1,7 @@
 // firebase.ts - Firebase initialization with Auth and Firestore
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
 import { getFirestore, initializeFirestore, Firestore, connectFirestoreEmulator, enableNetwork, disableNetwork, setLogLevel } from "firebase/firestore";
-import { collection, addDoc, serverTimestamp, onSnapshot, getDocs } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, onSnapshot, getDocs, doc, deleteDoc, query, where, writeBatch, DocumentReference } from "firebase/firestore";
 import { configureFirestoreForReactNative, FirestoreNetworkManager } from "./firestore-config";
 import {
   initializeAuth,
@@ -14,7 +14,8 @@ import {
   updateProfile,
   sendPasswordResetEmail,
   sendEmailVerification,
-  getReactNativePersistence
+  getReactNativePersistence,
+  deleteUser
 } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -72,9 +73,7 @@ try {
   } else {
     db = initializeFirestore(app, {
       // Auto-detect long polling to avoid WebChannel issues on some Android devices/emulators
-      experimentalAutoDetectLongPolling: true,
-      // Do not combine with experimentalForceLongPolling
-      useFetchStreams: false,
+      experimentalAutoDetectLongPolling: true
     });
     if (typeof global !== 'undefined') global.__FIRESTORE__ = db;
   }
@@ -92,6 +91,32 @@ try {
   console.error("Firebase initialization error:", (error as Error).message);
   throw error;
 }
+
+// ----------------------
+// Network retry helpers for Auth
+// ----------------------
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ms));
+
+const withAuthNetworkRetry = async <T>(op: () => Promise<T>, attempts = 3): Promise<T> => {
+  let lastErr: any;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await op();
+    } catch (e: any) {
+      lastErr = e;
+      const code = e?.code || e?.message || '';
+      const isNetwork = code === 'auth/network-request-failed' || /network/i.test(String(code));
+      if (!isNetwork) throw e;
+      // Exponential backoff: 400ms, 800ms, 1200ms
+      await sleep(400 * (i + 1));
+    }
+  }
+  // Enhance message for UI
+  if (lastErr?.code === 'auth/network-request-failed') {
+    lastErr.message = 'Network error. Please check your internet connection and try again.';
+  }
+  throw lastErr;
+};
 
 // ----------------------
 // Firestore helpers
@@ -177,7 +202,7 @@ const registerUser = async (
   if (!auth) throw new Error("Auth not initialized");
   
   try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const userCredential = await withAuthNetworkRetry(() => createUserWithEmailAndPassword(auth, email, password));
     
     if (userCredential.user) {
       // Update user profile with display name
@@ -204,13 +229,17 @@ const registerUser = async (
     }
     return null;
   } catch (error: any) {
+    const code = error?.code;
+    if (code === 'auth/network-request-failed') {
+      throw new Error('Network error during registration. Please connect to the internet and try again.');
+    }
     console.error("Registration error:", error.message);
     throw error;
   }
 };
 
 const loginUser = async (email: string, password: string): Promise<User | null> => {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const userCredential = await withAuthNetworkRetry(() => signInWithEmailAndPassword(auth, email, password));
   const user = userCredential.user;
   if (user && !user.emailVerified) {
     try {
@@ -297,6 +326,113 @@ const refreshUserVerificationStatus = async (): Promise<boolean> => {
   }
 };
 
+// ----------------------
+// Account & Data Deletion helpers (Play Store compliance)
+// ----------------------
+// Recursively deletes all Firestore data owned by the user under users/{uid}/expenses
+// and optionally the user root document (users/{uid}) if it exists. Client SDK doesn't
+// have recursiveDelete, so we manually batch-delete by querying.
+const deleteAllUserData = async (uid: string): Promise<void> => {
+  const chunkSize = 400;
+  let buffer: ReturnType<typeof writeBatch> = writeBatch(db);
+  let opCount = 0;
+
+  const flush = async () => {
+    if (opCount > 0) {
+      await buffer.commit();
+      buffer = writeBatch(db);
+      opCount = 0;
+    }
+  };
+
+  // 1) users/{uid}/expenses
+  try {
+    const nestedExpensesCol = collection(db, 'users', uid, 'expenses');
+    const nestedExpensesSnap = await getDocs(nestedExpensesCol);
+    for (const docSnap of nestedExpensesSnap.docs) {
+      buffer.delete(docSnap.ref);
+      opCount++;
+      if (opCount >= chunkSize) await flush();
+    }
+    await flush();
+  } catch {}
+
+  // 1b) users/{uid}/trips/*/expenses and delete trip docs too
+  try {
+    const tripsCol = collection(db, 'users', uid, 'trips');
+    const tripsSnap = await getDocs(tripsCol);
+    for (const tripDoc of tripsSnap.docs) {
+      // Delete expenses under this trip
+      const tripExpensesCol = collection(db, 'users', uid, 'trips', tripDoc.id, 'expenses');
+      const tripExpensesSnap = await getDocs(tripExpensesCol);
+      for (const e of tripExpensesSnap.docs) {
+        buffer.delete(e.ref);
+        opCount++;
+        if (opCount >= chunkSize) await flush();
+      }
+      // Delete the trip document itself
+      buffer.delete(tripDoc.ref);
+      opCount++;
+      if (opCount >= chunkSize) await flush();
+    }
+    await flush();
+  } catch {}
+
+  // 2) Top-level expenses where userId == uid
+  try {
+    const topExpensesQ = query(collection(db, 'expenses'), where('userId', '==', uid));
+    const topExpensesSnap = await getDocs(topExpensesQ);
+    for (const d of topExpensesSnap.docs) {
+      buffer.delete(d.ref);
+      opCount++;
+      if (opCount >= chunkSize) await flush();
+    }
+    await flush();
+  } catch {}
+
+  // 3) Top-level sessions where userId == uid
+  try {
+    const sessionsQ = query(collection(db, 'sessions'), where('userId', '==', uid));
+    const sessionsSnap = await getDocs(sessionsQ);
+    for (const d of sessionsSnap.docs) {
+      buffer.delete(d.ref);
+      opCount++;
+      if (opCount >= chunkSize) await flush();
+    }
+    await flush();
+  } catch {}
+
+  // 4) users/{uid}
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    buffer.delete(userDocRef);
+    opCount++;
+    await flush();
+  } catch {}
+};
+
+// Deletes all Firestore data for the current user, then deletes the Firebase Auth account.
+// If recent login is required, this will throw an error with code 'auth/requires-recent-login'.
+const deleteAccountAndData = async (): Promise<boolean> => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('No user is signed in');
+
+  // 1) Delete Firestore data first (as required by Play Store)
+  await deleteAllUserData(user.uid);
+
+  // 2) Delete Auth account
+  try {
+    await deleteUser(user);
+    return true;
+  } catch (error: any) {
+    // If re-auth is required, surface a clear message to UI
+    if (error?.code === 'auth/requires-recent-login') {
+      throw new Error('Recent login required. Please sign in again and retry account deletion.');
+    }
+    throw error;
+  }
+};
+
 export {
   app,
   db,
@@ -316,5 +452,7 @@ export {
   refreshUserVerificationStatus,
   addTripExpense,
   subscribeToTripExpenses,
-  getTripTotalExpenses
+  getTripTotalExpenses,
+  deleteAllUserData,
+  deleteAccountAndData
 };

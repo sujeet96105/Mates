@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { User } from 'firebase/auth';
-import { registerUser, loginUser, signOut, resetPassword, subscribeToAuthChanges, updateUserProfile } from './firebase';
+import { registerUser, loginUser, signOut, resetPassword, subscribeToAuthChanges, updateUserProfile, deleteAccountAndData } from './firebase';
 
 // Define the shape of our authentication context
 interface AuthContextType {
@@ -12,6 +12,7 @@ interface AuthContextType {
   logout: () => Promise<boolean>;
   resetUserPassword: (email: string) => Promise<boolean>;
   updateProfile: (displayName?: string, photoURL?: string) => Promise<User | null>;
+  deleteAccount: () => Promise<boolean>;
   error: string | null;
   setError: (error: string | null) => void;
 }
@@ -63,6 +64,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
       return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Delete account function (deletes Firestore user data first, then Auth account)
+  const deleteAccount = async (): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await deleteAccountAndData();
+      Alert.alert('Account Deleted', 'Your account and all data have been deleted.');
+      return true;
+    } catch (error: any) {
+      const message = error?.message || 'Failed to delete account. You may need to sign in again.';
+      setError(message);
+      Alert.alert('Deletion Failed', message);
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -160,6 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout,
     resetUserPassword,
     updateProfile,
+    deleteAccount,
     error,
     setError
   };

@@ -1,0 +1,3 @@
+Account and Data Deletion Policy (Bill Buddy)
+
+Users can delete their account and data directly in the app: Settings → Delete My Account. Upon confirmation, the app first deletes all Firestore data under users/{uid}/expenses and the user root document, then deletes the user’s Firebase Authentication account. We also provide a server-side cleanup via Firebase Cloud Functions that automatically removes all Firestore data when a Firebase Auth user is deleted, including deletions initiated outside the app. Data is retained for 0 days and is deleted immediately after the request is confirmed. Learn more and request deletion at: https://billbuddy-privacy.netlify.app/account-deletion

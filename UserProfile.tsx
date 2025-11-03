@@ -4,7 +4,7 @@ import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
 
 const UserProfile: React.FC = () => {
-  const { user, updateProfile, error, logout } = useAuth();
+  const { user, updateProfile, error, deleteAccount, isLoading } = useAuth() as any;
   const { isDarkMode, colors } = useTheme();
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,10 +73,15 @@ const UserProfile: React.FC = () => {
       </TouchableOpacity>
 
       <TouchableOpacity 
-        style={[stylesBase.button, { backgroundColor: colors.buttonSecondary }]} 
-        onPress={() => logout()}
+        style={[stylesBase.button, { backgroundColor: colors.error }]} 
+        onPress={() => deleteAccount()}
+        disabled={!!isLoading}
       >
-        <Text style={[stylesBase.buttonText, { color: colors.text }]}>Logout</Text>
+        {isLoading ? (
+          <ActivityIndicator color={isDarkMode ? colors.surface : '#FFFFFF'} />
+        ) : (
+          <Text style={[stylesBase.buttonText, { color: isDarkMode ? colors.surface : '#FFFFFF' }]}>Delete My Account</Text>
+        )}
       </TouchableOpacity>
     </View>
   );

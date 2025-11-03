@@ -5,7 +5,9 @@ import { useAppState } from './AppStateProvider';
 import { useTheme } from './useTheme';
 import { ModernButton, ModernCard, ModernInput, Icons } from './ModernUI';
 import { exportExpensesToPdf } from './pdfExport_clean';
+import FilterExpander from './FilterExpander';
 import Share from 'react-native-share';
+import { notifyPdfSaved } from './notifications';
 import { db } from './firebase';
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 
@@ -95,7 +97,8 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
       shadowRadius: 8,
       elevation: 4,
       borderWidth: 1, 
-      borderColor: colors.borderLight 
+      borderColor: colors.borderLight,
+      position: 'relative' as const
     },
     filterTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 12, letterSpacing: -0.3 },
     label: { fontSize: 15, fontWeight: '600', color: colors.text, marginBottom: 12 },
@@ -220,11 +223,12 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
       fontSize: 16,
       color: colors.text,
     },
-    sessionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    sessionBadge: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.borderLight },
-    sessionActions: { flexDirection: 'row' },
-    sessionBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginLeft: 8 },
+    sessionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap' as const },
+    sessionBadge: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.borderLight, maxWidth: '100%', flexShrink: 1 },
+    sessionActions: { flexDirection: 'row', flexShrink: 0, flexWrap: 'wrap' as const, gap: 8, marginTop: 8, alignItems: 'center' },
+    sessionBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingVertical: 8,marginTop: 10, paddingHorizontal: 12, borderRadius: 10 },
     sessionBtnText: { color: colors.text, fontWeight: '600' },
+    topRightIcon: { position: 'absolute', top: 12, right: 12 },
     modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
     modalCard: { width: '92%', backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.borderLight },
     modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 12 },
@@ -276,6 +280,8 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
         Alert.alert('Export Failed', error || 'Could not create the PDF.');
         return;
       }
+      // Notify user with the download path
+      try { await notifyPdfSaved(filePath); } catch {}
       Alert.alert(
         'Exported',
         `PDF saved${filePath ? ` to\n${filePath}` : ''}.\n\nDo you want to clear your Firestore expenses now?`,
@@ -346,8 +352,21 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
       keyExtractor={(item) => item.id?.toString() ?? Math.random().toString()}
       ListHeaderComponent={
         <>
-          {/* Filter Section */}
+          {/* Filter Section (compact with icon) */}
           <View style={styles.filterContainer}>
+            <View style={styles.topRightIcon}>
+              <FilterExpander
+                categories={categories}
+                categoryFilter={categoryFilter}
+                setCategoryFilter={setCategoryFilter}
+                dateRange={dateRange}
+                setDateRange={setDateRange}
+                openDatePicker={openDatePicker}
+                tabScrollSimultaneousRef={tabScrollSimultaneousRef}
+                onChildScrollBegin={handleChildScrollBegin}
+                onChildScrollEnd={handleChildScrollEnd}
+              />
+            </View>
             <View style={styles.sessionHeader}>
               <View>
                 <Text style={styles.filterTitle}>Active Session</Text>
@@ -366,176 +385,6 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                 </TouchableOpacity>
               </View>
             </View>
-            <Text style={styles.filterTitle}>Filter Expenses</Text>
-            {/* Category Filter */}
-            <Text style={styles.label}>Category:</Text>
-            <GHScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              nestedScrollEnabled
-              directionalLockEnabled
-              scrollEventThrottle={16}
-              decelerationRate="fast"
-              onScrollBeginDrag={handleChildScrollBegin}
-              onScrollEndDrag={handleChildScrollEnd}
-              onMomentumScrollEnd={handleChildScrollEnd}
-              onTouchEndCapture={handleChildScrollEnd}
-              // @ts-ignore react-native-gesture-handler prop passthrough
-              simultaneousHandlers={tabScrollSimultaneousRef}
-            >
-              <View style={{ flexDirection: 'row' }}>
-                <TouchableOpacity
-                  style={[
-                    styles.selectItem,
-                    categoryFilter === 'All' && styles.selectedItem,
-                  ]}
-                  onPress={() => { setCategoryFilter('All'); handleChildScrollEnd(); }}
-                >
-                  <Text
-                    style={[
-                      styles.selectItemText,
-                      categoryFilter === 'All' && styles.selectedItemText,
-                    ]}
-                  >
-                    All
-                  </Text>
-                </TouchableOpacity>
-                {categories.map((category) => (
-                  <TouchableOpacity
-                    key={category}
-                    style={[
-                      styles.selectItem,
-                      categoryFilter === category && styles.selectedItem,
-                    ]}
-                    onPress={() => { setCategoryFilter(category); handleChildScrollEnd(); }}
-                  >
-                    <Text
-                      style={[
-                        styles.selectItemText,
-                        categoryFilter === category && styles.selectedItemText,
-                      ]}
-                    >
-                      {category}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </GHScrollView>
-            {/* Date Range Filter */}
-            <Text style={[styles.label, { marginTop: 12 }]}>Date Range:</Text>
-            <View style={styles.dateRangeContainer}>
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => openDatePicker('start')}
-              >
-                <Text style={styles.dateButtonText}>{dateRange.start}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => openDatePicker('end')}
-              >
-                <Text style={styles.dateButtonText}>{dateRange.end}</Text>
-              </TouchableOpacity>
-            </View>
-            {/* Quick date range buttons */}
-            <GHScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginTop: 8 }}
-              nestedScrollEnabled
-              directionalLockEnabled
-              scrollEventThrottle={16}
-              decelerationRate="fast"
-              onScrollBeginDrag={handleChildScrollBegin}
-              onScrollEndDrag={handleChildScrollEnd}
-              onMomentumScrollEnd={handleChildScrollEnd}
-              onTouchEndCapture={handleChildScrollEnd}
-              // @ts-ignore react-native-gesture-handler prop passthrough
-              simultaneousHandlers={tabScrollSimultaneousRef}
-            >
-              <View style={{ flexDirection: 'row' }}>
-                <TouchableOpacity
-                  style={[styles.selectItem, { marginRight: 8 }]}
-                  onPress={() => {
-                    // Get today at midnight for consistent date handling
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    
-                    // Calculate 7 days ago
-                    const weekAgo = new Date(today);
-                    weekAgo.setDate(today.getDate() - 7);
-                    
-                    // Format dates as YYYY-MM-DD
-                    const todayStr = today.toISOString().split('T')[0];
-                    const weekAgoStr = weekAgo.toISOString().split('T')[0];
-                    
-                    setDateRange({ start: weekAgoStr, end: todayStr });
-                    handleChildScrollEnd();
-                  }}
-                >
-                  <Text style={styles.selectItemText}>Last 7 days</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.selectItem, { marginRight: 8 }]}
-                  onPress={() => {
-                    // Get today at midnight for consistent date handling
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    
-                    // Calculate 30 days ago
-                    const monthAgo = new Date(today);
-                    monthAgo.setDate(today.getDate() - 30);
-                    
-                    // Format dates as YYYY-MM-DD
-                    const todayStr = today.toISOString().split('T')[0];
-                    const monthAgoStr = monthAgo.toISOString().split('T')[0];
-                    
-                    setDateRange({ start: monthAgoStr, end: todayStr });
-                    handleChildScrollEnd();
-                  }}
-                >
-                  <Text style={styles.selectItemText}>Last 30 days</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.selectItem, { marginRight: 8 }]}
-                  onPress={() => {
-                    // Get today at midnight for consistent date handling
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    
-                    // Calculate 1 year ago
-                    const yearAgo = new Date(today);
-                    yearAgo.setFullYear(today.getFullYear() - 1);
-                    
-                    // Format dates as YYYY-MM-DD
-                    const todayStr = today.toISOString().split('T')[0];
-                    const yearAgoStr = yearAgo.toISOString().split('T')[0];
-                    
-                    setDateRange({ start: yearAgoStr, end: todayStr });
-                    handleChildScrollEnd();
-                  }}
-                >
-                  <Text style={styles.selectItemText}>Last Year</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.selectItem, { marginRight: 8 }]}
-                  onPress={() => {
-                    // Get oldest possible date (for "All Time")
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const todayStr = today.toISOString().split('T')[0];
-                    
-                    // Use a very old date for "All Time"
-                    const oldDate = "2000-01-01";
-                    
-                    setDateRange({ start: oldDate, end: todayStr });
-                    handleChildScrollEnd();
-                  }}
-                >
-                  <Text style={styles.selectItemText}>All Time</Text>
-                </TouchableOpacity>
-              </View>
-            </GHScrollView>
           </View>
           {/* Session chooser / creator modal */}
           <Modal transparent visible={showSessionModal} animationType="fade" onRequestClose={() => setShowSessionModal(false)}>
