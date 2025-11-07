@@ -20,7 +20,7 @@ import { AuthProvider, useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
 import { ModernButton, ModernCard, ModernHeader, ModernTab, Icons } from './ModernUI';
 import Svg, { Path } from 'react-native-svg';
-import mobileAds, { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import mobileAds, { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import { ANDROID_BANNER_AD_UNIT_ID } from './adConfig';
 import ExpensesTab from './ExpensesTab';
 import RoommatesTab from './RoommatesTab';
@@ -30,7 +30,8 @@ import SettingsTab from './SettingsTab';
 import { AuthContainer } from './AuthScreens';
 import UserProfile from './UserProfile';
 import { shouldRequestStoragePermission, requestStoragePermissionInApp } from './pdfExport_clean';
-
+import notifee, { EventType } from '@notifee/react-native';
+import Share from 'react-native-share';
 // Custom Logout SVG icon using provided path data
 const LogoutSvg: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = '#FFFFFF' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -39,9 +40,8 @@ const LogoutSvg: React.FC<{ size?: number; color?: string }> = ({ size = 20, col
     <Path d="M5.71783 11C5.80685 10.8902 5.89214 10.7837 5.97282 10.682C6.21831 10.3723 6.42615 10.1004 6.57291 9.90549C6.64636 9.80795 6.70468 9.72946 6.74495 9.67492L6.79152 9.61162L6.804 9.59454L6.80842 9.58848C6.80846 9.58842 6.80892 9.58778 5.99991 9L6.80842 9.58848C7.13304 9.14167 7.0345 8.51561 6.58769 8.19098C6.14091 7.86637 5.51558 7.9654 5.19094 8.41215L5.18812 8.41602L5.17788 8.43002L5.13612 8.48679C5.09918 8.53682 5.04456 8.61033 4.97516 8.7025C4.83623 8.88702 4.63874 9.14542 4.40567 9.43937C3.93443 10.0337 3.33759 10.7481 2.7928 11.2929L2.08569 12L2.7928 12.7071C3.33759 13.2519 3.93443 13.9663 4.40567 14.5606C4.63874 14.8546 4.83623 15.113 4.97516 15.2975C5.04456 15.3897 5.09918 15.4632 5.13612 15.5132L5.17788 15.57L5.18812 15.584L5.19045 15.5872C5.51509 16.0339 6.14091 16.1336 6.58769 15.809C7.0345 15.4844 7.13355 14.859 6.80892 14.4122L5.99991 15C6.80892 14.4122 6.80897 14.4123 6.80892 14.4122L6.804 14.4055L6.79152 14.3884L6.74495 14.3251C6.70468 14.2705 6.64636 14.1921 6.57291 14.0945C6.42615 13.8996 6.21831 13.6277 5.97282 13.318C5.89214 13.2163 5.80685 13.1098 5.71783 13H13.9999V11H5.71783Z" fill={color} />
   </Svg>
 );
-import './testFileSaver'; // Import test file to run FileSaver tests in development
 
-const BANNER_AD_UNIT_ID = __DEV__ ? TestIds.BANNER : ANDROID_BANNER_AD_UNIT_ID;
+const BANNER_AD_UNIT_ID = ANDROID_BANNER_AD_UNIT_ID;
 
 // Define our interfaces
 interface Expense {
@@ -168,6 +168,34 @@ function MainAppContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // Open exported PDF when user taps the notification (foreground and cold start)
+  useEffect(() => {
+    const unsubscribe = notifee.onForegroundEvent(async ({ type, detail }) => {
+      try {
+        if (type === EventType.PRESS && detail.pressAction?.id === 'open-pdf') {
+          const fp = (detail.notification?.data as any)?.filePath as string | undefined;
+          if (fp) {
+            try { await Share.open({ url: `file://${fp}` , type: 'application/pdf', showAppsToView: true }); } catch {}
+          }
+        }
+      } catch {}
+    });
+
+    (async () => {
+      try {
+        const initial = await notifee.getInitialNotification();
+        if (initial?.pressAction?.id === 'open-pdf') {
+          const fp = (initial.notification?.data as any)?.filePath as string | undefined;
+          if (fp) {
+            try { await Share.open({ url: `file://${fp}`, type: 'application/pdf', showAppsToView: true }); } catch {}
+          }
+        }
+      } catch {}
+    })();
+
+    return () => { try { unsubscribe(); } catch {} };
+  }, []);
 
   // Initialize AdMob once
   useEffect(() => {

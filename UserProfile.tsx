@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
+import NativeAdCard from './components/ads/NativeAdCard';
+import { ANDROID_NATIVE_AD_UNIT_ID_PROFILE, IOS_NATIVE_AD_UNIT_ID_PROFILE } from './adConfig';
 
 const UserProfile: React.FC = () => {
   const { user, updateProfile, error, deleteAccount, isLoading } = useAuth() as any;
@@ -71,6 +73,16 @@ const UserProfile: React.FC = () => {
           <Text style={[stylesBase.buttonText, { color: isDarkMode ? colors.surface : '#FFFFFF' }]}>Update Profile</Text>
         )}
       </TouchableOpacity>
+
+      {/* Native Ad Card (production unit) */}
+      {(() => {
+        const adUnitIdProfile = Platform.select({ android: ANDROID_NATIVE_AD_UNIT_ID_PROFILE, ios: IOS_NATIVE_AD_UNIT_ID_PROFILE }) || ANDROID_NATIVE_AD_UNIT_ID_PROFILE;
+        return (
+          <View style={{ marginTop: 12 }}>
+            <NativeAdCard adUnitId={adUnitIdProfile} visible={true} />
+          </View>
+        );
+      })()}
 
       <TouchableOpacity 
         style={[stylesBase.button, { backgroundColor: colors.error }]} 

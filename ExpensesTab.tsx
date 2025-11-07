@@ -223,7 +223,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
       fontSize: 16,
       color: colors.text,
     },
-    sessionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap' as const },
+    sessionHeader: { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap' as const },
     sessionBadge: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.borderLight, maxWidth: '100%', flexShrink: 1 },
     sessionActions: { flexDirection: 'row', flexShrink: 0, flexWrap: 'wrap' as const, gap: 8, marginTop: 8, alignItems: 'center' },
     sessionBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingVertical: 8,marginTop: 10, paddingHorizontal: 12, borderRadius: 10 },
@@ -259,15 +259,18 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     deleteButton: { alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, marginTop: 8, backgroundColor: colors.errorLight, borderRadius: 8 },
     deleteButtonText: { color: colors.error, fontSize: 14, fontWeight: '600' },
     emptyMessage: { textAlign: 'center', padding: 24, color: colors.textSecondary, fontSize: 16, fontWeight: '500' },
-    actionsRow: { marginTop: 8, alignItems: 'flex-end' },
-    exportButton: { backgroundColor: colors.primary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, alignItems: 'center', flexDirection: 'row', marginBottom: 24 },
+    actionsRow: { marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+    exportButton: { flex: 1, backgroundColor: colors.primary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, alignItems: 'center', flexDirection: 'row', marginBottom: 24 },
     exportButtonText: { color: 'white', fontWeight: '600', fontSize: 14 },
+    clearButton: { flex: 1, backgroundColor: colors.error, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, alignItems: 'center', flexDirection: 'row', marginBottom: 24 },
+    clearButtonText: { color: 'white', fontWeight: '600', fontSize: 14 },
   });
 
   const [isExporting, setIsExporting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
-  const handleExportAndClear = useCallback(async () => {
-    const allExpenses = expenses; // export full history, not just filtered list
+  const handleExport = useCallback(async () => {
+    const allExpenses = expenses; // export full history
     if (!allExpenses || allExpenses.length === 0) {
       Alert.alert('Nothing to Export', 'No expenses found to export.');
       return;
@@ -280,49 +283,67 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
         Alert.alert('Export Failed', error || 'Could not create the PDF.');
         return;
       }
-      // Notify user with the download path
       try { await notifyPdfSaved(filePath); } catch {}
       Alert.alert(
         'Exported',
-        `PDF saved${filePath ? ` to\n${filePath}` : ''}.\n\nDo you want to clear your Firestore expenses now?`,
+        `PDF saved${filePath ? ` to\n${filePath}` : ''}.`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'OK' },
           { text: 'Open', onPress: async () => { if (filePath) { try { await Share.open({ url: `file://${filePath}`, type: 'application/pdf', showAppsToView: true }); } catch {} } } },
-          { text: 'Clear', style: 'destructive', onPress: async () => {
-            try {
-              const expensesRef = collection(db!, 'expenses');
-              const idsWithFirestore = (allExpenses as any[]).filter(e => e.firestoreId).map(e => e.firestoreId as string);
-              if (idsWithFirestore.length > 0) {
-                const chunks: string[][] = [];
-                for (let i = 0; i < idsWithFirestore.length; i += 300) {
-                  chunks.push(idsWithFirestore.slice(i, i + 300));
-                }
-                for (const chunk of chunks) {
-                  await Promise.all(chunk.map(id => deleteDoc(doc(expensesRef, id))));
-                }
-              } else {
-                const numericIds = (allExpenses as any[]).map(e => e.id).filter(Boolean);
-                if (numericIds.length > 0) {
-                  const sliceSize = 10;
-                  for (let i = 0; i < numericIds.length; i += sliceSize) {
-                    const slice = numericIds.slice(i, i + sliceSize);
-                    const q = query(expensesRef, where('id', 'in', slice));
-                    const snap = await getDocs(q);
-                    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-                  }
-                }
-              }
-              Alert.alert('Cleared', 'Expenses cleared after export.');
-            } catch (e) {
-              Alert.alert('Error', 'Failed to clear expenses.');
-            }
-          } }
         ]
       );
     } finally {
       setIsExporting(false);
     }
   }, [expenses, settlements]);
+
+  const handleClear = useCallback(async () => {
+    const allExpenses = expenses;
+    if (!allExpenses || allExpenses.length === 0) {
+      Alert.alert('Nothing to Clear', 'No expenses found to clear.');
+      return;
+    }
+
+    Alert.alert(
+      'Clear All Expenses',
+      'This will delete all your expenses from Firestore. This action cannot be undone. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: async () => {
+          setIsClearing(true);
+          try {
+            const expensesRef = collection(db!, 'expenses');
+            const idsWithFirestore = (allExpenses as any[]).filter(e => e.firestoreId).map(e => e.firestoreId as string);
+            if (idsWithFirestore.length > 0) {
+              const chunks: string[][] = [];
+              for (let i = 0; i < idsWithFirestore.length; i += 300) {
+                chunks.push(idsWithFirestore.slice(i, i + 300));
+              }
+              for (const chunk of chunks) {
+                await Promise.all(chunk.map(id => deleteDoc(doc(expensesRef, id))));
+              }
+            } else {
+              const numericIds = (allExpenses as any[]).map(e => e.id).filter(Boolean);
+              if (numericIds.length > 0) {
+                const sliceSize = 10;
+                for (let i = 0; i < numericIds.length; i += sliceSize) {
+                  const slice = numericIds.slice(i, i + sliceSize);
+                  const q = query(expensesRef, where('id', 'in', slice));
+                  const snap = await getDocs(q);
+                  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+                }
+              }
+            }
+            Alert.alert('Cleared', 'Expenses cleared.');
+          } catch (e) {
+            Alert.alert('Error', 'Failed to clear expenses.');
+          } finally {
+            setIsClearing(false);
+          }
+        } }
+      ]
+    );
+  }, [expenses]);
 
   if (isLoading) {
     return (
@@ -629,8 +650,15 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
             {isExporting ? (
               <ActivityIndicator />
             ) : (
-              <TouchableOpacity style={styles.exportButton} onPress={handleExportAndClear} activeOpacity={0.9}>
-                <Text style={styles.exportButtonText}>Export & Clear</Text>
+              <TouchableOpacity style={styles.exportButton} onPress={handleExport} activeOpacity={0.9}>
+                <Text style={styles.exportButtonText}>Export</Text>
+              </TouchableOpacity>
+            )}
+            {isClearing ? (
+              <ActivityIndicator />
+            ) : (
+              <TouchableOpacity style={styles.clearButton} onPress={handleClear} activeOpacity={0.9}>
+                <Text style={styles.clearButtonText}>Clear</Text>
               </TouchableOpacity>
             )}
           </View>

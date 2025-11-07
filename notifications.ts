@@ -33,10 +33,11 @@ export async function notifyPdfSaved(filePath?: string | null) {
     await notifee.displayNotification({
       title: 'Bill Buddy: PDF Exported',
       body: `Your expense PDF is saved at:\n${pathText}`,
+      data: filePath ? { filePath } : undefined,
       android: {
         channelId: channelId || 'exports',
         smallIcon: 'ic_export_notification',
-        pressAction: { id: 'default' },
+        pressAction: { id: 'open-pdf' },
       },
       ios: {
         sound: 'default',

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { useAppState } from './AppStateProvider';
 import { useTheme } from './useTheme';
 import { ModernCard, ModernButton, Icons } from './ModernUI';
+import NativeAdCard from './components/ads/NativeAdCard';
+import { ANDROID_NATIVE_AD_UNIT_ID_STATISTICS, ANDROID_NATIVE_AD_UNIT_ID_SETTLEMENTS, IOS_NATIVE_AD_UNIT_ID_STATISTICS, IOS_NATIVE_AD_UNIT_ID_SETTLEMENTS } from './adConfig';
 
 const FinancialInsightsTab = () => {
-  const { settlements, generateExpenseStats } = useAppState();
+  const { settlements, generateExpenseStats, activeTab } = useAppState();
   const { isDarkMode, colors } = useTheme();
   const [activeSection, setActiveSection] = useState('statistics'); // 'statistics' or 'settlements'
   
@@ -123,51 +125,60 @@ const FinancialInsightsTab = () => {
     },
   });
 
+  const adUnitIdStats = Platform.select({ android: ANDROID_NATIVE_AD_UNIT_ID_STATISTICS, ios: IOS_NATIVE_AD_UNIT_ID_STATISTICS }) || ANDROID_NATIVE_AD_UNIT_ID_STATISTICS;
+  const adUnitIdSettlements = Platform.select({ android: ANDROID_NATIVE_AD_UNIT_ID_SETTLEMENTS, ios: IOS_NATIVE_AD_UNIT_ID_SETTLEMENTS }) || ANDROID_NATIVE_AD_UNIT_ID_SETTLEMENTS;
+
   const renderStatistics = () => (
-    <ModernCard style={styles.card}>
-      <Text style={styles.cardTitle}>Expense Statistics</Text>
-      {expenseStats.total > 0 ? (
-        <>
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Total Expenses:</Text>
-            <Text style={styles.statValue}>₹{expenseStats.total.toFixed(2)}</Text>
-          </View>
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Highest Expense:</Text>
-            <Text style={styles.statValue} numberOfLines={2} ellipsizeMode="tail">
-              ₹{expenseStats.highest.amount.toFixed(2)} - {expenseStats.highest.description}
-            </Text>
-          </View>
-        </>
-      ) : (
-        <Text style={styles.emptyMessage}>No expenses to analyze yet.</Text>
-      )}
-    </ModernCard>
+    <>
+      <ModernCard style={styles.card}>
+        <Text style={styles.cardTitle}>Expense Statistics</Text>
+        {expenseStats.total > 0 ? (
+          <>
+            <View style={styles.statRow}>
+              <Text style={styles.statLabel}>Total Expenses:</Text>
+              <Text style={styles.statValue}>₹{expenseStats.total.toFixed(2)}</Text>
+            </View>
+            <View style={styles.statRow}>
+              <Text style={styles.statLabel}>Highest Expense:</Text>
+              <Text style={styles.statValue} numberOfLines={2} ellipsizeMode="tail">
+                ₹{expenseStats.highest.amount.toFixed(2)} - {expenseStats.highest.description}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.emptyMessage}>No expenses to analyze yet.</Text>
+        )}
+      </ModernCard>
+      <NativeAdCard adUnitId={adUnitIdStats} visible={activeTab === 'financialInsights' && activeSection === 'statistics'} />
+    </>
   );
 
   const renderSettlements = () => (
-    <ModernCard style={styles.card}>
-      <Text style={styles.cardTitle}>Settlements</Text>
-      {settlements.length > 0 ? (
-        settlements.map((item) => {
-          if ('text' in item) {
-            return (
-              <Text key={item.key} style={styles.settlementText}>
-                {item.text}
-              </Text>
-            );
-          } else {
-            return (
-              <Text key={item.key} style={styles.settlementText}>
-                <Text style={styles.debtorName}>{item.from}</Text> pays <Text style={styles.creditorName}>{item.to}</Text> ₹{item.amount.toFixed(2)}
-              </Text>
-            );
-          }
-        })
-      ) : (
-        <Text style={styles.emptyMessage}>No settlements needed at this time</Text>
-      )}
-    </ModernCard>
+    <>
+      <ModernCard style={styles.card}>
+        <Text style={styles.cardTitle}>Settlements</Text>
+        {settlements.length > 0 ? (
+          settlements.map((item) => {
+            if ('text' in item) {
+              return (
+                <Text key={item.key} style={styles.settlementText}>
+                  {item.text}
+                </Text>
+              );
+            } else {
+              return (
+                <Text key={item.key} style={styles.settlementText}>
+                  <Text style={styles.debtorName}>{item.from}</Text> pays <Text style={styles.creditorName}>{item.to}</Text> ₹{item.amount.toFixed(2)}
+                </Text>
+              );
+            }
+          })
+        ) : (
+          <Text style={styles.emptyMessage}>No settlements needed at this time</Text>
+        )}
+      </ModernCard>
+      <NativeAdCard adUnitId={adUnitIdSettlements} visible={activeTab === 'financialInsights' && activeSection === 'settlements'} />
+    </>
   );
 
   return (
