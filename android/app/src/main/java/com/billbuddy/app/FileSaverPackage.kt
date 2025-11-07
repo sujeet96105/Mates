@@ -1,4 +1,4 @@
-package com.mates
+package com.billbuddy.app
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

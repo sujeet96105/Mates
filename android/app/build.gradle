@@ -78,9 +78,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.mates"
+    namespace "com.billbuddy.app"
     defaultConfig {
-        applicationId "com.mates"
+        applicationId "com.billbuddy.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -111,8 +111,8 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
-    implementation 'com.google.firebase:firebase-auth:23.0.0'  // version may vary
-    implementation platform('com.google.firebase:firebase-bom:34.1.0')
+    implementation platform('com.google.firebase:firebase-bom:34.5.0')
+    implementation 'com.google.firebase:firebase-auth'
     implementation 'com.google.firebase:firebase-analytics'
 
     if (hermesEnabled.toBoolean()) {

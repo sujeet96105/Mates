@@ -1,10 +1,40 @@
 {
   "project_info": {
     "project_number": "952108330206",
+    "firebase_url": "https://mates-ffbb1-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "mates-ffbb1",
     "storage_bucket": "mates-ffbb1.firebasestorage.app"
   },
   "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:952108330206:android:2196f4eff1c05048d0e64f",
+        "android_client_info": {
+          "package_name": "com.billbuddy.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "952108330206-9niqcptkkme0q0uks56rlbc58ifi1uoq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhkgmgkSTNmFQXfMfQcl6ShA7qJkvRtiI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "952108330206-9niqcptkkme0q0uks56rlbc58ifi1uoq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
     {
       "client_info": {
         "mobilesdk_app_id": "1:952108330206:android:bb28b2f29e40d628d0e64f",
@@ -32,7 +62,8 @@
             }
           ]
         }
-      }
+      },
+      "admob_app_id": "ca-app-pub-6638172524607879~4893085945"
     }
   ],
   "configuration_version": "1"

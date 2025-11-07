@@ -1,4 +1,4 @@
-package com.mates
+package com.billbuddy.app
 
 import android.content.ContentValues
 import android.content.Context

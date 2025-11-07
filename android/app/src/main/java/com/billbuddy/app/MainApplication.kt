@@ -1,4 +1,4 @@
-package com.mates
+package com.billbuddy.app
 
 import android.app.Application
 import com.facebook.react.PackageList
