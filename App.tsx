@@ -13,6 +13,7 @@ import {
   Modal,
   ScrollView,
   Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 // import LinearGradient from 'react-native-linear-gradient'; // Will add this dependency later
 import { AppStateProvider, useAppState } from './AppStateProvider';
@@ -159,6 +160,8 @@ function MainAppContent() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const scrollRef = useRef<GHScrollView>(null);
   const deviceWidth = Dimensions.get('window').width;
+  const { width } = useWindowDimensions();
+  const isTablet = width > 768;
   const tabOrder: Array<'expenses' | 'roommates' | 'summary' | 'financialInsights'> = ['expenses','roommates','summary','financialInsights'];
 
   useEffect(() => {
@@ -309,9 +312,9 @@ function MainAppContent() {
     tabBar: {
       flexDirection: 'row',
       backgroundColor: colors.surface,
-      paddingHorizontal: 16,
+      paddingHorizontal: isTablet ? 24 : 16,
       paddingVertical: 8,
-      marginHorizontal: 16,
+      marginHorizontal: isTablet ? 0 : 16,
       marginBottom: 16,
       borderRadius: 16,
       shadowColor: colors.shadow,
@@ -326,6 +329,14 @@ function MainAppContent() {
       alignItems: 'stretch',
       gap: 4,
       paddingRight: 4,
+      justifyContent: 'space-between',
+    },
+    tabRow: {
+      flexDirection: 'row',
+      width: '100%',
+      alignItems: 'stretch',
+      justifyContent: 'space-evenly',
+      gap: 4,
     },
     tabButton: {
       flex: 1,
@@ -796,32 +807,57 @@ function MainAppContent() {
         </View>
       </View>
       <View style={styles.tabBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabScrollContent}
-        >
-          <ModernTab
-            title="Expenses"
-            isActive={activeTab === 'expenses'}
-            onPress={() => handleTabChange('expenses')}
-          />
-          <ModernTab
-            title="Friends"
-            isActive={activeTab === 'roommates'}
-            onPress={() => handleTabChange('roommates')}
-          />
-          <ModernTab
-            title="Summary"
-            isActive={activeTab === 'summary'}
-            onPress={() => handleTabChange('summary')}
-          />
-          <ModernTab
-            title="Insights"
-            isActive={activeTab === 'financialInsights'}
-            onPress={() => handleTabChange('financialInsights')}
-          />
-        </ScrollView>
+        {isTablet ? (
+          <View style={styles.tabRow}>
+            <ModernTab
+              title="Expenses"
+              isActive={activeTab === 'expenses'}
+              onPress={() => handleTabChange('expenses')}
+            />
+            <ModernTab
+              title="Friends"
+              isActive={activeTab === 'roommates'}
+              onPress={() => handleTabChange('roommates')}
+            />
+            <ModernTab
+              title="Summary"
+              isActive={activeTab === 'summary'}
+              onPress={() => handleTabChange('summary')}
+            />
+            <ModernTab
+              title="Insights"
+              isActive={activeTab === 'financialInsights'}
+              onPress={() => handleTabChange('financialInsights')}
+            />
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabScrollContent}
+          >
+            <ModernTab
+              title="Expenses"
+              isActive={activeTab === 'expenses'}
+              onPress={() => handleTabChange('expenses')}
+            />
+            <ModernTab
+              title="Friends"
+              isActive={activeTab === 'roommates'}
+              onPress={() => handleTabChange('roommates')}
+            />
+            <ModernTab
+              title="Summary"
+              isActive={activeTab === 'summary'}
+              onPress={() => handleTabChange('summary')}
+            />
+            <ModernTab
+              title="Insights"
+              isActive={activeTab === 'financialInsights'}
+              onPress={() => handleTabChange('financialInsights')}
+            />
+          </ScrollView>
+        )}
       </View>
       <GHScrollView
         ref={scrollRef}

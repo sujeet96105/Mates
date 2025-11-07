@@ -8,6 +8,7 @@ import {
   ViewStyle,
   TextStyle,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { useTheme } from './useTheme';
 
@@ -259,11 +260,13 @@ export const ModernTab: React.FC<ModernTabProps> = ({
   badge,
 }) => {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isTablet = width > 768;
 
   const tabStyle: ViewStyle = {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: isTablet ? 14 : 12,
+    paddingHorizontal: isTablet ? 18 : 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
@@ -278,7 +281,7 @@ export const ModernTab: React.FC<ModernTabProps> = ({
   };
 
   const textStyle: TextStyle = {
-    fontSize: 13,
+    fontSize: isTablet ? 15 : 13,
     fontWeight: isActive ? '600' : '500',
     color: isActive ? colors.textOnPrimary : colors.textSecondary,
     marginTop: icon ? 4 : 0,
