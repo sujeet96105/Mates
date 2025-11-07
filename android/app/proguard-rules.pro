@@ -22,3 +22,6 @@
 -dontwarn org.jadice.**
 -dontwarn javax.imageio.plugins.jpeg2000.**
 -dontwarn com.tom_roush.pdfbox.filter.JPXFilter
+
+# Keep PdfSaver native module
+-keep class com.billbuddy.app.pdf.** { *; }

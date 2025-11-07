@@ -1,11 +1,11 @@
-// Clean PDF export module with ASCII-safe arrows and correct Android permissions
+// Clean PDF export module using SAF/MediaStore on Android (no storage permissions)
 // Use require to avoid TS ESM default export mismatch
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const RNHTMLtoPDF = require('react-native-html-to-pdf');
-import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import RNFS from 'react-native-fs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import FileSaver from './FileSaver';
+import { savePdfToDownloads } from './src/native/PdfSaver';
 
 export type ExpenseRecord = {
   description: string;
@@ -24,87 +24,14 @@ export type SettlementItem =
 export type ExportResult = { filePath: string | undefined; success: boolean; error?: string };
 
 export async function requestStoragePermissionInApp(): Promise<boolean> {
-  if (Platform.OS !== 'android') return true;
-  const apiLevel = Number(Platform.Version) || 0;
-  try {
-    if (apiLevel >= 30) {
-      const hasPermission = await checkManageExternalStoragePermission();
-      if (hasPermission) return true;
-      return new Promise((resolve) => {
-        Alert.alert(
-          'Allow Mates to access photos, media, and files on your device?',
-          'This lets you save PDF exports to your Downloads folder where you can easily find and share them.',
-          [
-            { text: 'Deny', style: 'cancel', onPress: () => resolve(false) },
-            {
-              text: 'Allow',
-              onPress: async () => {
-                try {
-                  const url = 'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION';
-                  await Linking.sendIntent(url, []);
-                  setTimeout(async () => {
-                    const granted = await checkManageExternalStoragePermission();
-                    resolve(granted);
-                  }, 1000);
-                } catch (e) {
-                  Linking.openSettings();
-                  resolve(false);
-                }
-              },
-            },
-          ],
-          { cancelable: false }
-        );
-      });
-    } else if (apiLevel >= 23) {
-      const granted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
-      );
-      if (granted) return true;
-      const result = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        {
-          title:
-            'Allow Mates to access photos, media, and files on your device?',
-          message:
-            'This lets you save PDF exports to your Downloads folder where you can easily find and share them.',
-          buttonPositive: 'Allow',
-          buttonNegative: 'Deny',
-        }
-      );
-      return result === PermissionsAndroid.RESULTS.GRANTED;
-    } else {
-      return true;
-    }
-  } catch (error) {
-    console.log('Permission request error:', error);
-    return false;
-  }
+  // No storage permission is required with SAF/MediaStore
+  return true;
 }
 
-async function checkManageExternalStoragePermission(): Promise<boolean> {
-  try {
-    const testFile = `${RNFS.DownloadDirectoryPath}/mates_permission_test.txt`;
-    await RNFS.writeFile(testFile, 'test', 'utf8');
-    await RNFS.unlink(testFile);
-    return true;
-  } catch {
-    return false;
-  }
-}
+// No-op in SAF world
+async function checkManageExternalStoragePermission(): Promise<boolean> { return true; }
 
-export async function shouldRequestStoragePermission(): Promise<boolean> {
-  if (Platform.OS !== 'android') return false;
-  const apiLevel = Number(Platform.Version) || 0;
-  if (apiLevel >= 30) return !(await checkManageExternalStoragePermission());
-  if (apiLevel >= 23) {
-    const granted = await PermissionsAndroid.check(
-      PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
-    );
-    return !granted;
-  }
-  return false;
-}
+export async function shouldRequestStoragePermission(): Promise<boolean> { return false; }
 
 export async function exportExpensesToPdf(
   expenses: ExpenseRecord[],
@@ -122,6 +49,11 @@ export async function exportExpensesToPdf(
       error:
         'Storage permission is required to save PDF files to Downloads folder.',
     };
+  }
+
+  // On Android, always use MediaStore (PdfSaver) flow to be Play-Console compliant
+  if (String(Platform.OS) === 'android') {
+    return await fallbackExportWithPdfLib(expenses, 'ExpenseHistory_' + new Date().toISOString().slice(0, 10), settlements);
   }
 
   const total = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
@@ -457,25 +389,13 @@ async function fallbackExportWithPdfLib(
 
     const base64 = await pdfDoc.saveAsBase64({ dataUri: false });
     const fileName = `${safeFileName}.pdf`;
-    if (Platform.OS === 'android') {
+    if (String(Platform.OS) === 'android') {
       try {
-        const result = await FileSaver.savePdfToDownloads(fileName, base64);
-        if (result.success) return { filePath: result.filePath, success: true };
-        throw new Error('Native FileSaver failed');
-      } catch (nativeError) {
-        try {
-          const publicPath = `${RNFS.DownloadDirectoryPath}/${fileName}`;
-          await RNFS.writeFile(publicPath, base64, 'base64');
-          return { filePath: publicPath, success: true };
-        } catch (rnfsError) {
-          return {
-            filePath: undefined,
-            success: false,
-            error: `Both native and RNFS failed: ${String(nativeError)} | ${String(
-              rnfsError
-            )}`,
-          };
-        }
+        const uri = await savePdfToDownloads(base64, fileName);
+        // Return uri as filePath for display; actual file system path is not needed
+        return { filePath: uri, success: true };
+      } catch (e: any) {
+        return { filePath: undefined, success: false, error: String(e?.message || e) };
       }
     } else {
       const dir = RNFS.DocumentDirectoryPath;

@@ -5,8 +5,10 @@ import { useAppState } from './AppStateProvider';
 import { useTheme } from './useTheme';
 import { ModernButton, ModernCard, ModernInput, Icons } from './ModernUI';
 import { exportExpensesToPdf } from './pdfExport_clean';
+ 
 import FilterExpander from './FilterExpander';
 import Share from 'react-native-share';
+import { openPdfUri } from './src/native/PdfSaver';
 import { notifyPdfSaved } from './notifications';
 import { db } from './firebase';
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
@@ -289,7 +291,27 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
         `PDF saved${filePath ? ` to\n${filePath}` : ''}.`,
         [
           { text: 'OK' },
-          { text: 'Open', onPress: async () => { if (filePath) { try { await Share.open({ url: `file://${filePath}`, type: 'application/pdf', showAppsToView: true }); } catch {} } } },
+          { text: 'Open', onPress: async () => {
+              if (!filePath) return;
+              const isContent = filePath.startsWith('content://');
+              if (isContent) {
+                try {
+                  await openPdfUri(filePath);
+                } catch (e: any) {
+                  Alert.alert('Open failed', 'No app available to open PDF or permission was denied. Please install a PDF viewer.');
+                }
+              } else {
+                const url = `file://${filePath}`;
+                try {
+                  await Share.open({ url, type: 'application/pdf', showAppsToView: true });
+                } catch {
+                  try { await import('react-native').then(m => m.Linking.openURL(url)); } catch {
+                    Alert.alert('Open failed', 'Could not open the PDF with any handler.');
+                  }
+                }
+              }
+            }
+          },
         ]
       );
     } finally {
@@ -345,6 +367,8 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     );
   }, [expenses]);
 
+  
+
   if (isLoading) {
     return (
       <View style={[styles.tabContent, { flex: 1, justifyContent: 'center', alignItems: 'center' }] }>
@@ -388,6 +412,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                 onChildScrollEnd={handleChildScrollEnd}
               />
             </View>
+          
             <View style={styles.sessionHeader}>
               <View>
                 <Text style={styles.filterTitle}>Active Session</Text>

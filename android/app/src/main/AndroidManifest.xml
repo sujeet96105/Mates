@@ -1,27 +1,24 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 	xmlns:tools="http://schemas.android.com/tools"
 	package="com.billbuddy.app">
 
-    <!-- Query for MANAGE_EXTERNAL_STORAGE intent on Android 11+ -->
+
     <queries>
         <intent>
-            <action android:name="android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION" />
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="application/pdf" />
         </intent>
     </queries>
 
+
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Ensure no legacy storage permission from libraries gets merged -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
     
-    <!-- Storage permissions for different Android versions -->
-    <!-- For Android 6.0-10 (API 23-29) -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
-        android:maxSdkVersion="29" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
-        android:maxSdkVersion="32" />
-    
-    <!-- For Android 11+ (API 30+) - MediaStore API doesn't require special permissions for Downloads -->
-    <!-- But we keep this for legacy fallback cases -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" 
-        tools:ignore="ScopedStorage" />
+    <!-- Keep READ/WRITE storage permissions out entirely; SAF/MediaStore used instead -->
 
     <application
       android:name=".MainApplication"
