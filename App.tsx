@@ -8,14 +8,13 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
-  SafeAreaView,
   ActivityIndicator,
   Modal,
   ScrollView,
-  Dimensions,
+  useColorScheme,
   useWindowDimensions,
 } from 'react-native';
-// import LinearGradient from 'react-native-linear-gradient'; // Will add this dependency later
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppStateProvider, useAppState } from './AppStateProvider';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
@@ -89,14 +88,42 @@ const DEFAULT_CATEGORIES = [
   'Other'
 ];
 
+const rootStyles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+  },
+});
+
 // Main App component
 export default function App() {
+  const scheme = useColorScheme();
+  const isDark = scheme === 'dark';
+  // Use the same background color as defined in the theme (useTheme.tsx)
+  const backgroundColor = isDark ? '#0F172A' : '#FFFFFF';
+
   return (
-    <AuthProvider>
-      <AppStateProvider>
-        <AppWithAuth />
-      </AppStateProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={rootStyles.flex}>
+      <SafeAreaProvider>
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+        />
+        <SafeAreaView
+          style={[rootStyles.container, { backgroundColor }]}
+          edges={['top']}
+        >
+          <AuthProvider>
+            <AppStateProvider>
+              <AppWithAuth />
+            </AppStateProvider>
+          </AuthProvider>
+        </SafeAreaView>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -144,6 +171,7 @@ function MainAppContent() {
   // Use our centralized theme hook
   const { isDarkMode, colors } = useTheme();
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   // State variables (from context)
   const {
     activeTab, setActiveTab, handleTabChange, showDatePicker, setShowDatePicker, expenses, setExpenses, newExpense, setNewExpense,
@@ -158,16 +186,18 @@ function MainAppContent() {
   // Local state for date input
   const [tempDateInput, setTempDateInput] = useState('');
   const [showProfileModal, setShowProfileModal] = useState(false);
+  // Ref for simultaneous gesture handling in FilterExpander (must be gesture handler ref type)
   const scrollRef = useRef<GHScrollView>(null);
-  const deviceWidth = Dimensions.get('window').width;
   const { width } = useWindowDimensions();
   const isTablet = width > 768;
-  const tabOrder: Array<'expenses' | 'roommates' | 'summary' | 'financialInsights'> = ['expenses','roommates','summary','financialInsights'];
+  const deviceWidth = width;
+  const tabOrder: Array<'expenses' | 'roommates' | 'summary' | 'financialInsights'> = ['expenses', 'roommates', 'summary', 'financialInsights'];
 
+  // Sync scroll position when activeTab changes programmatically
   useEffect(() => {
     const index = tabOrder.indexOf(activeTab as any);
-    if (index >= 0) {
-      scrollRef.current?.scrollTo({ x: index * deviceWidth, animated: true });
+    if (index >= 0 && scrollRef.current) {
+      scrollRef.current.scrollTo({ x: index * deviceWidth, animated: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -776,9 +806,7 @@ function MainAppContent() {
   };
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+    <View style={backgroundStyle}>
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
@@ -875,7 +903,7 @@ function MainAppContent() {
         }}
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1 }}
-     >
+      >
         <View style={{ width: deviceWidth, flex: 1 }}>
           <ExpensesTab tabScrollSimultaneousRef={scrollRef} />
         </View>
@@ -890,7 +918,13 @@ function MainAppContent() {
         </View>
       </GHScrollView>
       {/* AdMob banner below tabs */}
-      <View style={{ alignItems: 'center', backgroundColor: colors.surface, paddingVertical: 4 }}>
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: colors.surface,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 0,
+        }}
+      >
         <BannerAd unitId={BANNER_AD_UNIT_ID} size={BannerAdSize.BANNER} />
       </View>
       <Modal
@@ -1015,7 +1049,6 @@ function MainAppContent() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
-    </GestureHandlerRootView>
+    </View>
   );
 }

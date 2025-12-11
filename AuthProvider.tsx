@@ -93,7 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       setError(null);
       const user = await registerUser(email, password, displayName);
-      // Regardless of immediate auth state, inform the user about verification email
+      // If we get here, registration was successful and verification email was sent
       Alert.alert(
         'Verification Email Sent',
         'Please check your inbox for a verification link to activate your account. If you do not see it, check your Spam/Junk folder.'
@@ -102,6 +102,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       const code: string | undefined = error?.code;
       let message = error?.message || 'Failed to register';
+      
+      // Check if account was created but verification email failed
+      if (message.includes('Account created successfully')) {
+        // Account was created, but verification email failed
+        Alert.alert(
+          'Account Created',
+          message + ' You can try signing in to resend the verification email.'
+        );
+        setError(null); // Don't show this as an error since account was created
+        return null;
+      }
+      
+      // Handle other registration errors
       if (code === 'auth/email-already-in-use') {
         message = 'This email is already in use';
       } else if (code === 'auth/invalid-email') {

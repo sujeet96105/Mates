@@ -12,6 +12,7 @@ import {
   Alert,
   SafeAreaView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
 import BillBuddyLogo from './MatesLogo';
@@ -22,6 +23,7 @@ export const LoginScreen: React.FC<{ onForgotPassword: () => void }> = ({ onForg
   const [password, setPassword] = useState('');
   const { login, isLoading, error, setError } = useAuth();
   const { colors, isDarkMode } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -39,7 +41,7 @@ export const LoginScreen: React.FC<{ onForgotPassword: () => void }> = ({ onForg
       style={styles.container}
     >
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingBottom: insets.bottom }]}>
           <View style={styles.formContainer}>
           <BillBuddyLogo size={100} showText={true} />
           <Text style={styles.title}>Welcome Back</Text>
@@ -105,6 +107,7 @@ export const RegisterScreen: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const { register, isLoading, error, setError } = useAuth();
   const { colors, isDarkMode } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const handleRegister = async () => {
     if (!email || !password || !confirmPassword || !displayName) {
@@ -128,7 +131,7 @@ export const RegisterScreen: React.FC = () => {
       style={styles.container}
     >
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingBottom: insets.bottom }]}>
           <View style={styles.formContainer}>
           <BillBuddyLogo size={100} showText={true} />
           <Text style={styles.title}>Create Account</Text>
@@ -207,6 +210,7 @@ export const ForgotPasswordScreen: React.FC<{ onBack: () => void }> = ({ onBack 
   const [email, setEmail] = useState('');
   const { resetUserPassword, isLoading, error } = useAuth();
   const { colors, isDarkMode } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const handleResetPassword = async () => {
     if (!email) {
@@ -223,7 +227,8 @@ export const ForgotPasswordScreen: React.FC<{ onBack: () => void }> = ({ onBack 
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.formContainer}>
+      <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <View style={styles.formContainer}>
         <Text style={styles.title}>Reset Password</Text>
         <Text style={styles.subtitle}>Enter your email to receive reset instructions</Text>
 
@@ -257,7 +262,8 @@ export const ForgotPasswordScreen: React.FC<{ onBack: () => void }> = ({ onBack 
         <TouchableOpacity onPress={onBack} style={styles.linkButton}>
           <Text style={styles.linkText}>Back to Login</Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -266,6 +272,7 @@ export const ForgotPasswordScreen: React.FC<{ onBack: () => void }> = ({ onBack 
 export const AuthContainer: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<'login' | 'register' | 'forgotPassword'>('login');
   const { colors, isDarkMode } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const styles = createStyles(colors, isDarkMode);
 
@@ -274,7 +281,7 @@ export const AuthContainer: React.FC = () => {
       {activeScreen === 'login' && (
         <>
           <LoginScreen onForgotPassword={() => setActiveScreen('forgotPassword')} />
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => setActiveScreen('register')}>
               <Text style={styles.footerLink}>Sign Up</Text>
@@ -286,7 +293,7 @@ export const AuthContainer: React.FC = () => {
       {activeScreen === 'register' && (
         <>
           <RegisterScreen />
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <Text style={styles.footerText}>Already have an account? </Text>
             <TouchableOpacity onPress={() => setActiveScreen('login')}>
               <Text style={styles.footerLink}>Sign In</Text>

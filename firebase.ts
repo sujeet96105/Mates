@@ -206,14 +206,30 @@ const registerUser = async (
     
     if (userCredential.user) {
       // Update user profile with display name
-      await updateProfile(userCredential.user, { displayName });
+      try {
+        await updateProfile(userCredential.user, { displayName });
+      } catch (profileError: any) {
+        console.error("Failed to update user profile:", profileError?.message || profileError);
+        // Continue even if profile update fails
+      }
       
       // Send verification email automatically after registration
+      let verificationEmailSent = false;
+      let verificationError: any = null;
+      
       try {
         await sendEmailVerification(userCredential.user);
+        verificationEmailSent = true;
         console.log("Registration successful and verification email sent");
-      } catch (verificationError: any) {
-        console.warn("Registration successful but verification email failed:", verificationError.message);
+      } catch (e: any) {
+        verificationError = e;
+        console.error("Registration successful but verification email failed:", verificationError?.message || verificationError);
+        // Log detailed error for debugging
+        console.error("Verification email error details:", {
+          code: verificationError?.code,
+          message: verificationError?.message,
+          email: userCredential.user.email
+        });
       }
       
       // Enforce verification before app access: sign out immediately
@@ -221,7 +237,22 @@ const registerUser = async (
         await firebaseSignOut(auth);
         console.log("User signed out after registration to enforce email verification");
       } catch (signOutError: any) {
-        console.warn("Sign out after registration failed:", signOutError.message);
+        console.error("Sign out after registration failed:", signOutError?.message || signOutError);
+        // This is critical - if sign out fails, user might be logged in without verification
+        // Try to force sign out by clearing auth state
+        try {
+          await firebaseSignOut(auth);
+        } catch (retryError: any) {
+          console.error("Retry sign out also failed:", retryError?.message || retryError);
+        }
+      }
+      
+      // If verification email failed, throw an error so the UI can inform the user
+      if (!verificationEmailSent) {
+        const errorMsg = verificationError?.code === 'auth/too-many-requests'
+          ? 'Account created successfully, but we couldn\'t send a verification email right now due to too many requests. Please wait a few minutes and check your email, or try signing in to resend the verification email.'
+          : 'Account created successfully, but we couldn\'t send a verification email right now. Please try signing in to resend the verification email.';
+        throw new Error(errorMsg);
       }
       
       // Return null so callers don't treat the user as logged in
@@ -230,31 +261,99 @@ const registerUser = async (
     return null;
   } catch (error: any) {
     const code = error?.code;
+    
+    // If it's our custom verification email error, re-throw it
+    if (error?.message?.includes('Account created successfully')) {
+      throw error;
+    }
+    
+    // Handle network errors
     if (code === 'auth/network-request-failed') {
       throw new Error('Network error during registration. Please connect to the internet and try again.');
     }
-    console.error("Registration error:", error.message);
+    
+    // Log detailed error for debugging
+    console.error("Registration error:", {
+      code: code,
+      message: error?.message || error,
+      email: email
+    });
+    
     throw error;
   }
 };
 
 const loginUser = async (email: string, password: string): Promise<User | null> => {
-  const userCredential = await withAuthNetworkRetry(() => signInWithEmailAndPassword(auth, email, password));
-  const user = userCredential.user;
-  if (user && !user.emailVerified) {
-    try {
-      await sendEmailVerification(user);
-      console.log("Verification email re-sent on unverified login");
-    } catch (e: any) {
-      console.warn("Failed resending verification email:", e?.message);
+  if (!auth) throw new Error("Auth not initialized");
+  
+  try {
+    const userCredential = await withAuthNetworkRetry(() => signInWithEmailAndPassword(auth, email, password));
+    const user = userCredential.user;
+    
+    if (user && !user.emailVerified) {
+      let verificationEmailSent = false;
+      let verificationError: any = null;
+      
+      // Try to send verification email
+      try {
+        await sendEmailVerification(user);
+        verificationEmailSent = true;
+        console.log("Verification email re-sent on unverified login");
+      } catch (e: any) {
+        verificationError = e;
+        console.error("Failed resending verification email:", e?.message || e);
+        // Log the full error for debugging
+        console.error("Verification email error details:", {
+          code: e?.code,
+          message: e?.message,
+          email: user.email
+        });
+      }
+      
+      // Sign out and reject login
+      try {
+        await firebaseSignOut(auth);
+        console.log("User signed out after unverified login attempt");
+      } catch (signOutError: any) {
+        console.error("Sign out after unverified login failed:", signOutError?.message || signOutError);
+      }
+      
+      // Provide accurate error message based on whether email was sent
+      if (verificationEmailSent) {
+        throw new Error("Please verify your email before logging in. We've sent you a verification link.");
+      } else {
+        // If email sending failed, provide a more helpful error message
+        const errorMsg = verificationError?.code === 'auth/too-many-requests' 
+          ? "Please verify your email before logging in. Too many verification emails sent. Please wait a few minutes and check your email, or try again later."
+          : "Please verify your email before logging in. We couldn't send a verification email right now. Please check your email for a previous verification link, or try again in a few moments.";
+        throw new Error(errorMsg);
+      }
     }
-    // Sign out and reject login
-    try {
-      await firebaseSignOut(auth);
-    } catch {}
-    throw new Error("Please verify your email before logging in. We've sent you a verification link.");
+    
+    return user;
+  } catch (error: any) {
+    const code = error?.code;
+    
+    // If it's already our custom verification error, re-throw it
+    if (error?.message?.includes('verify your email')) {
+      throw error;
+    }
+    
+    // Handle network errors
+    if (code === 'auth/network-request-failed') {
+      throw new Error('Network error during login. Please check your internet connection and try again.');
+    }
+    
+    // Log the error for debugging
+    console.error("Login error:", {
+      code: code,
+      message: error?.message || error,
+      email: email
+    });
+    
+    // Re-throw the original error
+    throw error;
   }
-  return user;
 };
 
 const signOut = async () => {
