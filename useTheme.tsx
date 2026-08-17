@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useColorScheme } from 'react-native';
 
 export interface Theme {
@@ -65,6 +66,7 @@ export const useTheme = (): Theme => {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
 
+  return useMemo(() => {
   // Modern color palette
   const brandColors = {
     // Primary gradient - Modern purple to blue
@@ -213,8 +215,9 @@ export const useTheme = (): Theme => {
     gradientCard: ['#1E293B', '#334155'],
   };
 
-  return {
-    isDarkMode,
-    colors: isDarkMode ? darkTheme : lightTheme,
-  };
+    return {
+      isDarkMode,
+      colors: isDarkMode ? darkTheme : lightTheme,
+    };
+  }, [isDarkMode]);
 };

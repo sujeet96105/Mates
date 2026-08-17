@@ -1,8 +1,22 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from './AuthProvider';
 import { db } from './firebase';  // Import Firestore
-import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, onSnapshot } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  deleteDoc,
+  onSnapshot,
+  DocumentData,
+  FirestoreError,
+  QueryDocumentSnapshot,
+  QuerySnapshot,
+} from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Default categories if none are set
@@ -134,14 +148,14 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [tabsScrollEnabled, setTabsScrollEnabled] = useState(true);
   
   // Handle tab selection to redirect settlements and statistics to financialInsights
-  const handleTabChange = (tab: string) => {
+  const handleTabChange = useCallback((tab: string) => {
     // If user tries to access the old tabs, redirect to the new combined tab
     if (tab === 'settlements' || tab === 'statistics') {
       setActiveTab('financialInsights');
     } else {
       setActiveTab(tab);
     }
-  };
+  }, []);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [newExpense, setNewExpense] = useState<Expense>({
     description: '',
@@ -154,8 +168,6 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
   const [friends, setFriends] = useState<string[]>([]);
   const [newFriend, setNewFriend] = useState<string>('');
-  const [summaryData, setSummaryData] = useState<SummaryData>({});
-  const [settlements, setSettlements] = useState<SettlementItem[]>([]);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [isLoading, setIsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -171,6 +183,25 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Sessions state
   const [sessions, setSessions] = useState<ExpenseSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  const insertSessionInternal = useCallback(async (sessionName: string, sessionType: string, uid: string): Promise<string | null> => {
+    try {
+      const sessionsCol = collection(db!, 'users', uid, 'sessions');
+      const newDocRef = doc(sessionsCol);
+      const payload: ExpenseSession = {
+        sessionId: newDocRef.id,
+        sessionName,
+        sessionType,
+        createdDate: Date.now(),
+        userId: uid,
+      };
+      await setDoc(newDocRef, payload);
+      return newDocRef.id;
+    } catch (e) {
+      console.error('Failed creating session', e);
+      return null;
+    }
+  }, []);
 
   // Persist active session when it changes
   useEffect(() => {
@@ -240,7 +271,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const data = docSnapshot.data();
             if (data) {
               const nextCategories = Array.isArray(data.categories) ? data.categories : undefined;
-              if (nextCategories && !arraysEqual(nextCategories, categories)) setCategories(nextCategories);
+              if (nextCategories) {
+                setCategories(prev => arraysEqual(nextCategories, prev) ? prev : nextCategories);
+              }
               // Cache locally
               AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({
                 roommates: (data as any).roommates ?? [],
@@ -312,8 +345,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             ...(activeSessionId ? [where('sessionId', '==', activeSessionId)] as any : [])
           );
           console.log('[Firestore] Subscribing to expenses...');
-          unsubscribeExpenses = onSnapshot(expensesQuery as any, (snapshot) => {
-            const expensesData = snapshot.docs.map(docSnapshot => {
+          unsubscribeExpenses = onSnapshot(expensesQuery, (snapshot: QuerySnapshot<DocumentData>) => {
+            const expensesData = snapshot.docs.map((docSnapshot: QueryDocumentSnapshot<DocumentData>) => {
               const data = docSnapshot.data();
               return {
                 ...data,
@@ -329,7 +362,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             });
             console.log('[Firestore] Realtime expenses update. Count =', snapshot.size);
             setExpenses(expensesData);
-          }, (err) => {
+          }, (err: FirestoreError) => {
             console.warn('[Firestore] Expenses listener error:', err);
           });
           // Initialize local state immediately as well (before first snapshot)
@@ -394,7 +427,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         unsubscribeActiveSessionDoc();
       }
     };
-  }, [user, activeSessionId]);
+  }, [user, activeSessionId, insertSessionInternal]);
 
   // Validate expense data when expenses change
   useEffect(() => {
@@ -420,43 +453,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Removed auto-save effect to avoid feedback loops with onSnapshot updates.
   // Saving to Firestore is handled explicitly in action handlers (e.g., handleAddRoommate, confirmAddCategory).
 
-  // Calculate balances whenever expenses or friends change
-  useEffect(() => {
-    calculateBalances();
-  }, [expenses, friends]);
-
-  const getFilteredExpenses = () => {
-    return expenses.filter(expense => {
-      // Check if category matches
-      let matchesCategory = true;
-      if (categoryFilter !== 'All') {
-        if (categoryFilter === 'Other') {
-          const categoriesWithoutOther = categories.filter(c => c !== 'Other');
-          // Include items explicitly marked as 'Other' or items whose category is not in the known category list
-          matchesCategory = expense.category === 'Other' || !categoriesWithoutOther.includes(expense.category);
-        } else {
-          matchesCategory = expense.category === categoryFilter;
-        }
-      }
-      
-      // Normalize dates for comparison by setting all to midnight
-      const expenseDate = new Date(expense.date);
-      expenseDate.setHours(0, 0, 0, 0);
-      
-      const startDate = new Date(dateRange.start);
-      startDate.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date(dateRange.end);
-      endDate.setHours(23, 59, 59, 999); // End of day
-      
-      // Check if date is in range (inclusive of start and end dates)
-      const isInDateRange = expenseDate >= startDate && expenseDate <= endDate;
-      
-      return matchesCategory && isInDateRange;
-    });
-  };
-
-  const calculateBalances = () => {
+  const summaryData = useMemo<SummaryData>(() => {
     const balances: { [key: string]: Balance } = {};
     friends.forEach((mate) => {
       balances[mate] = { paid: 0, owes: 0, balance: 0 };
@@ -465,7 +462,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const payer = expense.paidBy;
       const amount = Number(expense.amount);
       const splitWith = expense.splitWith.length > 0 ? expense.splitWith : [...friends];
-      const splitAmount = amount / splitWith.length;
+      const splitAmount = splitWith.length > 0 ? amount / splitWith.length : 0;
       if (balances[payer]) {
         balances[payer].paid += amount;
       }
@@ -480,18 +477,17 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         balances[mate].balance = balances[mate].paid - balances[mate].owes;
       }
     });
-    setSummaryData(balances);
-    calculateSettlements(balances);
-  };
+    return balances;
+  }, [expenses, friends]);
 
-  const calculateSettlements = (balances: { [key: string]: Balance }) => {
+  const settlements = useMemo<SettlementItem[]>(() => {
     const creditors: { name: string; amount: number }[] = [];
     const debtors: { name: string; amount: number }[] = [];
     friends.forEach((mate) => {
-      if (balances[mate]?.balance > 0) {
-        creditors.push({ name: mate, amount: balances[mate].balance });
-      } else if (balances[mate]?.balance < 0) {
-        debtors.push({ name: mate, amount: -balances[mate].balance });
+      if (summaryData[mate]?.balance > 0) {
+        creditors.push({ name: mate, amount: summaryData[mate].balance });
+      } else if (summaryData[mate]?.balance < 0) {
+        debtors.push({ name: mate, amount: -summaryData[mate].balance });
       }
     });
     creditors.sort((a, b) => b.amount - a.amount);
@@ -521,10 +517,41 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         debtorIndex++;
       }
     }
-    setSettlements(settlementItems);
-  };
+    return settlementItems;
+  }, [friends, summaryData]);
 
-  const handleAddExpense = async () => {
+  const getFilteredExpenses = useCallback(() => {
+    return expenses.filter(expense => {
+      // Check if category matches
+      let matchesCategory = true;
+      if (categoryFilter !== 'All') {
+        if (categoryFilter === 'Other') {
+          const categoriesWithoutOther = categories.filter(c => c !== 'Other');
+          // Include items explicitly marked as 'Other' or items whose category is not in the known category list
+          matchesCategory = expense.category === 'Other' || !categoriesWithoutOther.includes(expense.category);
+        } else {
+          matchesCategory = expense.category === categoryFilter;
+        }
+      }
+      
+      // Normalize dates for comparison by setting all to midnight
+      const expenseDate = new Date(expense.date);
+      expenseDate.setHours(0, 0, 0, 0);
+      
+      const startDate = new Date(dateRange.start);
+      startDate.setHours(0, 0, 0, 0);
+      
+      const endDate = new Date(dateRange.end);
+      endDate.setHours(23, 59, 59, 999); // End of day
+      
+      // Check if date is in range (inclusive of start and end dates)
+      const isInDateRange = expenseDate >= startDate && expenseDate <= endDate;
+      
+      return matchesCategory && isInDateRange;
+    });
+  }, [categories, categoryFilter, dateRange.end, dateRange.start, expenses]);
+
+  const handleAddExpense = useCallback(async () => {
     if (!newExpense.description || newExpense.amount <= 0 || !newExpense.paidBy || !user) {
       Alert.alert('Missing Information', 'Please fill in all required fields');
       return;
@@ -567,35 +594,15 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await setDoc(newExpenseRef, expenseToAdd);
       
       // Update local state
-      setExpenses([...expenses, expenseToAdd]);
+      setExpenses(prev => [...prev, expenseToAdd]);
       setNewExpense({ description: '', amount: 0, paidBy: '', splitWith: [], date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString(), category: 'Groceries' });
     } catch (error) {
       console.error('Error adding expense:', error);
       Alert.alert('Error', 'Failed to add expense. Please try again.');
     }
-  };
+  }, [activeSessionId, insertSessionInternal, newExpense, sessions, user]);
 
-  // Sessions helpers (DAO-like)
-  const insertSessionInternal = async (sessionName: string, sessionType: string, uid: string): Promise<string | null> => {
-    try {
-      const sessionsCol = collection(db!, 'users', uid, 'sessions');
-      const newDocRef = doc(sessionsCol);
-      const payload: ExpenseSession = {
-        sessionId: newDocRef.id,
-        sessionName,
-        sessionType,
-        createdDate: Date.now(),
-        userId: uid,
-      };
-      await setDoc(newDocRef, payload);
-      return newDocRef.id;
-    } catch (e) {
-      console.error('Failed creating session', e);
-      return null;
-    }
-  };
-
-  const insertSession = async (sessionName: string, sessionType: string): Promise<string | null> => {
+  const insertSession = useCallback(async (sessionName: string, sessionType: string): Promise<string | null> => {
     if (!user) return null;
     const id = await insertSessionInternal(sessionName, sessionType, user.uid);
     if (id) {
@@ -603,12 +610,12 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       AsyncStorage.setItem(`mates:user:${user.uid}:activeSessionId`, id).catch(() => {});
     }
     return id;
-  };
+  }, [insertSessionInternal, user]);
 
-  const getAllSessions = () => sessions;
-  const getExpensesBySession = (sessionId: string) => expenses.filter(e => e.sessionId === sessionId);
+  const getAllSessions = useCallback(() => sessions, [sessions]);
+  const getExpensesBySession = useCallback((sessionId: string) => expenses.filter(e => e.sessionId === sessionId), [expenses]);
 
-  const deleteSession = async (sessionId: string): Promise<boolean> => {
+  const deleteSession = useCallback(async (sessionId: string): Promise<boolean> => {
     if (!user) return false;
     try {
       // 1) Delete expenses for this session (belonging to this user)
@@ -638,9 +645,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.warn('Failed to delete session', e);
       return false;
     }
-  };
+  }, [activeSessionId, sessions, user]);
 
-  const confirmAddCategory = () => {
+  const confirmAddCategory = useCallback(() => {
     if (newCategoryName && newCategoryName.trim() && !categories.includes(newCategoryName.trim())) {
       setCategories([...categories, newCategoryName.trim()]);
       setNewCategoryName('');
@@ -648,9 +655,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } else if (categories.includes(newCategoryName.trim())) {
       Alert.alert('Duplicate Category', 'This category already exists');
     }
-  };
+  }, [categories, newCategoryName]);
 
-  const handleAddFriend = async () => {
+  const handleAddFriend = useCallback(async () => {
     if (!newFriend.trim()) {
       Alert.alert('Missing Information', 'Please enter a friend name');
       return;
@@ -671,12 +678,12 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch (error) {
       console.warn('Failed to persist friend add:', error);
     }
-  };
+  }, [activeSessionId, friends, newFriend, user]);
 
   // Backward compatibility alias
   const handleAddRoommate = handleAddFriend;
 
-  const handleRemoveExpense = (id?: number) => {
+  const handleRemoveExpense = useCallback((id?: number) => {
     if (!id || !user) return;
     
     // Find the expense in our local state first
@@ -718,19 +725,19 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }, style: 'destructive' },
     ]);
-  };
+  }, [expenses, user]);
 
-  const handleRemoveFriend = (mate: string) => {
+  const handleRemoveFriend = useCallback((mate: string) => {
     Alert.alert('Confirm Delete', 'Are you sure you want to remove this friend? This will affect expense calculations.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', onPress: async () => { const updatedFriends = friends.filter(friend => friend !== mate); setFriends(updatedFriends); try { if (user && activeSessionId) { const sessionDocRef = doc(db!, 'users', user.uid, 'sessions', activeSessionId); await setDoc(sessionDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true }); await AsyncStorage.setItem(`mates:user:${user.uid}:session:${activeSessionId}:friends`, JSON.stringify(updatedFriends)); } } catch (error) { console.warn('Failed to persist friend removal:', error); } }, style: 'destructive' },
     ]);
-  };
+  }, [activeSessionId, friends, user]);
 
   // Backward compatibility alias
   const handleRemoveRoommate = handleRemoveFriend;
 
-  const handleSplitWithChange = (mate: string) => {
+  const handleSplitWithChange = useCallback((mate: string) => {
     const updatedSplitWith = [...newExpense.splitWith];
     if (updatedSplitWith.includes(mate)) {
       const index = updatedSplitWith.indexOf(mate);
@@ -739,22 +746,22 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updatedSplitWith.push(mate);
     }
     setNewExpense({ ...newExpense, splitWith: updatedSplitWith });
-  };
+  }, [newExpense]);
 
-  const openDatePicker = (type: 'start' | 'end') => {
+  const openDatePicker = useCallback((type: 'start' | 'end') => {
     setDatePickerType(type);
     setShowDatePicker(true);
-  };
+  }, []);
 
-  const updateDateRange = (date: string) => {
+  const updateDateRange = useCallback((date: string) => {
     if (datePickerType === 'start') {
       setDateRange(prev => ({ ...prev, start: date }));
     } else {
       setDateRange(prev => ({ ...prev, end: date }));
     }
-  };
+  }, [datePickerType]);
 
-  const generateExpenseStats = () => {
+  const generateExpenseStats = useCallback(() => {
     const stats = { total: 0, byCategory: {} as { [key: string]: number }, highest: { amount: 0, description: '' }, averagePerRoommate: 0 };
     if (expenses.length === 0) return stats;
     expenses.forEach(expense => {
@@ -772,69 +779,107 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       stats.averagePerRoommate = stats.total / friends.length;
     }
     return stats;
-  };
+  }, [expenses, friends.length]);
+
+  const contextValue = useMemo<AppStateContextType>(() => ({
+    activeTab,
+    setActiveTab,
+    handleTabChange,
+    tabsScrollEnabled,
+    setTabsScrollEnabled,
+    expenses,
+    setExpenses,
+    newExpense,
+    setNewExpense,
+    // New naming convention
+    friends,
+    setFriends,
+    newFriend,
+    setNewFriend,
+    handleAddFriend,
+    handleRemoveFriend,
+    // Backward compatibility aliases
+    roommates: friends,
+    setRoommates: setFriends,
+    newRoommate: newFriend,
+    setNewRoommate: setNewFriend,
+    handleAddRoommate,
+    handleRemoveRoommate,
+
+    summaryData,
+    settlements,
+    categories,
+    setCategories,
+    isLoading,
+    categoryFilter,
+    setCategoryFilter,
+    dateRange,
+    setDateRange,
+    showDatePicker,
+    setShowDatePicker,
+    datePickerType,
+    setDatePickerType,
+    showCategoryModal,
+    setShowCategoryModal,
+    newCategoryName,
+    setNewCategoryName,
+    getFilteredExpenses,
+    handleAddExpense,
+    handleRemoveExpense,
+    handleSplitWithChange,
+    openDatePicker,
+    updateDateRange,
+    confirmAddCategory,
+    generateExpenseStats,
+    // Sessions
+    sessions,
+    activeSessionId,
+    setActiveSessionId,
+    insertSession,
+    getAllSessions,
+    getExpensesBySession,
+    deleteSession,
+  }), [
+    activeSessionId,
+    activeTab,
+    categories,
+    categoryFilter,
+    confirmAddCategory,
+    datePickerType,
+    dateRange,
+    deleteSession,
+    expenses,
+    friends,
+    generateExpenseStats,
+    getAllSessions,
+    getExpensesBySession,
+    getFilteredExpenses,
+    handleAddExpense,
+    handleAddFriend,
+    handleAddRoommate,
+    handleRemoveExpense,
+    handleRemoveFriend,
+    handleRemoveRoommate,
+    handleSplitWithChange,
+    handleTabChange,
+    insertSession,
+    isLoading,
+    newCategoryName,
+    newExpense,
+    newFriend,
+    openDatePicker,
+    sessions,
+    settlements,
+    showCategoryModal,
+    showDatePicker,
+    summaryData,
+    tabsScrollEnabled,
+    updateDateRange,
+  ]);
 
   return (
     <AppStateContext.Provider
-      value={{
-        activeTab,
-        setActiveTab,
-        handleTabChange,
-        tabsScrollEnabled,
-        setTabsScrollEnabled,
-        expenses,
-        setExpenses,
-        newExpense,
-        setNewExpense,
-        // New naming convention
-        friends,
-        setFriends,
-        newFriend,
-        setNewFriend,
-        handleAddFriend,
-        handleRemoveFriend,
-        // Backward compatibility aliases
-        roommates: friends,
-        setRoommates: setFriends,
-        newRoommate: newFriend,
-        setNewRoommate: setNewFriend,
-        handleAddRoommate,
-        handleRemoveRoommate,
-        
-        summaryData,
-        settlements,
-        categories,
-        setCategories,
-        isLoading,
-        categoryFilter,
-        setCategoryFilter,
-        dateRange,
-        setDateRange,
-        showDatePicker,
-        setShowDatePicker,
-        datePickerType,
-        setDatePickerType,
-        showCategoryModal,
-        setShowCategoryModal,
-        newCategoryName,
-        setNewCategoryName,
-        getFilteredExpenses,
-        handleAddExpense,
-        handleRemoveExpense,
-        handleSplitWithChange,
-        openDatePicker,
-        updateDateRange,
-        confirmAddCategory,
-        generateExpenseStats,
-        // Sessions
-        sessions,
-        activeSessionId,
-        setActiveSessionId,
-        insertSession,
-        getAllSessions,
-        getExpensesBySession,
-        deleteSession,
-      }}
+      value={contextValue}
     >
       {children}
     </AppStateContext.Provider>

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { memo, useRef, useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator, Alert, Modal, Dimensions } from 'react-native';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useAppState } from './AppStateProvider';
@@ -12,10 +12,63 @@ import { openPdfUri } from './src/native/PdfSaver';
 import { notifyPdfSaved } from './notifications';
 import { db } from './firebase';
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
+import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
 
 type ExpensesTabProps = {
   tabScrollSimultaneousRef?: any;
 };
+
+type ExpenseListItemProps = {
+  item: any;
+  styles: any;
+  onRemoveExpense: (id?: number) => void;
+};
+
+const getExpenseSortTime = (expense: any) => {
+  if (typeof expense.createdAt === 'number') {
+    return expense.createdAt;
+  }
+  return new Date(`${expense.date} ${expense.time}`).getTime();
+};
+
+const getExpenseKey = (item: any) => {
+  if (item.firestoreId) {
+    return item.firestoreId;
+  }
+  if (item.id) {
+    return String(item.id);
+  }
+  return `${item.date}-${item.time}-${item.description}-${item.amount}`;
+};
+
+const AnimatedExpenseView = Animated.createAnimatedComponent(View) as React.ComponentType<any>;
+
+const ExpenseListItem = memo(({ item, styles, onRemoveExpense }: ExpenseListItemProps) => {
+  const amount = Number(item.amount || 0);
+
+  return (
+    <AnimatedExpenseView
+      entering={FadeInUp.duration(180)}
+      layout={LinearTransition.duration(180)}
+      style={styles.expenseItem}
+    >
+      <View style={styles.expenseHeader}>
+        <Text style={styles.expenseDescription}>{item.description}</Text>
+        <Text style={styles.expenseAmount}>Rs {amount.toFixed(2)}</Text>
+      </View>
+      <Text style={styles.expenseDetails}>Paid by: {item.paidBy}</Text>
+      <Text style={styles.expenseDetails}>Split with: {Array.isArray(item.splitWith) ? item.splitWith.join(', ') : ''}</Text>
+      <Text style={styles.expenseDate}>{item.date} {item.time}</Text>
+      <Text style={styles.expenseDetails}>Category: {item.category}</Text>
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={() => item.id && onRemoveExpense(item.id)}
+      >
+        <Text style={styles.deleteButtonText}>Delete</Text>
+      </TouchableOpacity>
+    </AnimatedExpenseView>
+  );
+});
 
 const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) => {
   const {
@@ -51,7 +104,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
 
   // Ensure parent tab swipe is re-enabled even if a child gesture doesn't report end
   const reenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleChildScrollBegin = () => {
+  const handleChildScrollBegin = useCallback(() => {
     setTabsScrollEnabled(false);
     if (reenableTimerRef.current) {
       clearTimeout(reenableTimerRef.current);
@@ -61,14 +114,14 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
       setTabsScrollEnabled(true);
       reenableTimerRef.current = null;
     }, 800);
-  };
-  const handleChildScrollEnd = () => {
+  }, [setTabsScrollEnabled]);
+  const handleChildScrollEnd = useCallback(() => {
     if (reenableTimerRef.current) {
       clearTimeout(reenableTimerRef.current);
       reenableTimerRef.current = null;
     }
     setTabsScrollEnabled(true);
-  };
+  }, [setTabsScrollEnabled]);
 
   // Show custom category input when "Other" is selected in Add Expense
   const [showCustomCategory, setShowCustomCategory] = useState(newExpense.category === 'Other');
@@ -85,8 +138,30 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
   const [newSessionType, setNewSessionType] = useState<'Personal' | 'Trip'>('Personal');
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isDeletingSessionId, setIsDeletingSessionId] = useState<string | null>(null);
+  const [amountInput, setAmountInput] = useState('');
+  const previousExpenseCountRef = useRef(expenses.length);
 
-  const styles = StyleSheet.create({
+  React.useEffect(() => {
+    if (expenses.length > previousExpenseCountRef.current) {
+      setAmountInput('');
+    }
+    previousExpenseCountRef.current = expenses.length;
+  }, [expenses.length]);
+
+  const handleAmountChange = (text: string) => {
+    const normalizedText = text.replace(',', '.');
+    if (!/^\d*\.?\d{0,2}$/.test(normalizedText)) {
+      return;
+    }
+
+    setAmountInput(normalizedText);
+    const amount = normalizedText === '' || normalizedText === '.'
+      ? 0
+      : Number(normalizedText);
+    setNewExpense({ ...newExpense, amount });
+  };
+
+  const styles = useMemo(() => StyleSheet.create({
     tabContent: { padding: 20, flex: 1, backgroundColor: colors.backgroundSecondary },
     filterContainer: { 
       marginBottom: 20, 
@@ -228,7 +303,16 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     sessionHeader: { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap' as const },
     sessionBadge: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.borderLight, maxWidth: '100%', flexShrink: 1 },
     sessionActions: { flexDirection: 'row', flexShrink: 0, flexWrap: 'wrap' as const, gap: 8, marginTop: 8, alignItems: 'center' },
-    sessionBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingVertical: 8,marginTop: 10, paddingHorizontal: 12, borderRadius: 10 },
+    sessionBtn: { 
+      backgroundColor: colors.surface,
+      borderWidth: 1, 
+      borderColor: colors.border, 
+      paddingVertical: 8,
+      marginTop: 10, 
+      paddingHorizontal: 12,
+      marginRight: 8,
+      borderRadius: 10 
+    },
     sessionBtnText: { color: colors.text, fontWeight: '600' },
     topRightIcon: { position: 'absolute', top: 12, right: 12 },
     modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
@@ -266,7 +350,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     exportButtonText: { color: 'white', fontWeight: '600', fontSize: 14 },
     clearButton: { flex: 1, backgroundColor: colors.error, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, alignItems: 'center', flexDirection: 'row', marginBottom: 24 },
     clearButtonText: { color: 'white', fontWeight: '600', fontSize: 14 },
-  });
+  }), [colors]);
 
   const [isExporting, setIsExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -367,7 +451,21 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     );
   }, [expenses]);
 
-  
+  const visibleExpenses = useMemo(() => {
+    return [...getFilteredExpenses()].sort((a, b) => getExpenseSortTime(b) - getExpenseSortTime(a));
+  }, [getFilteredExpenses]);
+
+  const activeSessionName = useMemo(() => {
+    return sessions.find(s => s.sessionId === activeSessionId)?.sessionName || 'Not set';
+  }, [activeSessionId, sessions]);
+
+  const renderExpenseItem = useCallback(({ item }: { item: any }) => (
+    <ExpenseListItem
+      item={item}
+      styles={styles}
+      onRemoveExpense={handleRemoveExpense}
+    />
+  ), [handleRemoveExpense, styles]);
 
   if (isLoading) {
     return (
@@ -383,18 +481,13 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
   return (
     <FlatList
       style={styles.tabContent}
-      data={getFilteredExpenses().sort((a, b) => {
-        const aCreated = (a as any).createdAt as number | undefined;
-        const bCreated = (b as any).createdAt as number | undefined;
-        if (typeof aCreated === 'number' && typeof bCreated === 'number') {
-          return bCreated - aCreated; // Newest first
-        }
-        // Fallback to date+time comparison
-        const dateA = new Date(a.date + ' ' + a.time).getTime();
-        const dateB = new Date(b.date + ' ' + b.time).getTime();
-        return dateB - dateA;
-      })}
-      keyExtractor={(item) => item.id?.toString() ?? Math.random().toString()}
+      data={visibleExpenses}
+      keyExtractor={getExpenseKey}
+      renderItem={renderExpenseItem}
+      initialNumToRender={8}
+      maxToRenderPerBatch={8}
+      windowSize={7}
+      removeClippedSubviews
       ListHeaderComponent={
         <>
           {/* Filter Section (compact with icon) */}
@@ -418,7 +511,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                 <Text style={styles.filterTitle}>Active Session</Text>
                 <View style={styles.sessionBadge}>
                   <Text style={{ color: colors.text, fontWeight: '600' }}>
-                    {sessions.find(s => s.sessionId === activeSessionId)?.sessionName || 'Not set'}
+                    {activeSessionName}
                   </Text>
                 </View>
               </View>
@@ -539,9 +632,9 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
               style={styles.input}
               placeholder="Amount"
               placeholderTextColor={colors.textPlaceholder}
-              keyboardType="numeric"
-              value={newExpense.amount.toString()}
-              onChangeText={(text) => setNewExpense({ ...newExpense, amount: Number(text) })}
+              keyboardType="decimal-pad"
+              value={amountInput}
+              onChangeText={handleAmountChange}
             />
             <Text style={styles.label}>Paid By:</Text>
             <View style={styles.selectContainer}>
@@ -689,24 +782,6 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
           </View>
         </>
       }
-      renderItem={({ item }) => (
-        <View style={styles.expenseItem}>
-          <View style={styles.expenseHeader}>
-            <Text style={styles.expenseDescription}>{item.description}</Text>
-            <Text style={styles.expenseAmount}>₹{item.amount.toFixed(2)}</Text>
-          </View>
-          <Text style={styles.expenseDetails}>Paid by: {item.paidBy}</Text>
-          <Text style={styles.expenseDetails}>Split with: {item.splitWith.join(', ')}</Text>
-          <Text style={styles.expenseDate}>{item.date} {item.time}</Text>
-          <Text style={styles.expenseDetails}>Category: {item.category}</Text>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => item.id && handleRemoveExpense(item.id)}
-          >
-            <Text style={styles.deleteButtonText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      )}
       ListEmptyComponent={
         <Text style={styles.emptyMessage}>No expenses to show</Text>
       }
