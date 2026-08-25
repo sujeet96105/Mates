@@ -14,6 +14,7 @@ import { useTheme } from './useTheme';
 import NativeAdCard from './components/ads/NativeAdCard';
 import { ANDROID_NATIVE_AD_UNIT_ID_PROFILE, IOS_NATIVE_AD_UNIT_ID_PROFILE } from './adConfig';
 import { useAppMessage } from './AppMessage';
+import SettingsTab from './SettingsTab';
 
 const UserProfile: React.FC = () => {
   const { user, updateProfile, error, deleteAccount, isLoading } = useAuth() as any;
@@ -54,7 +55,7 @@ const UserProfile: React.FC = () => {
   return (
     <ScrollView style={[stylesBase.container, { backgroundColor: colors.surface }]} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={[stylesBase.title, { color: colors.text }]}>User Profile</Text>
-      
+
       <View style={stylesBase.infoContainer}>
         <Text style={[stylesBase.label, { color: colors.textSecondary }]}>Email:</Text>
         <Text style={[stylesBase.value, { color: colors.text }]}>{user?.email}</Text>
@@ -63,8 +64,8 @@ const UserProfile: React.FC = () => {
       <View style={stylesBase.inputContainer}>
         <Text style={[stylesBase.label, { color: colors.textSecondary }]}>Display Name:</Text>
         <TextInput
-          style={[stylesBase.input, { 
-            borderColor: colors.border, 
+          style={[stylesBase.input, {
+            borderColor: colors.border,
             backgroundColor: colors.surface,
             color: colors.text
           }]}
@@ -77,8 +78,8 @@ const UserProfile: React.FC = () => {
 
       {error && <Text style={[stylesBase.errorText, { color: colors.error }]}>{error}</Text>}
 
-      <TouchableOpacity 
-        style={[stylesBase.button, { backgroundColor: colors.primary }]} 
+      <TouchableOpacity
+        style={[stylesBase.button, { backgroundColor: colors.primary }]}
         onPress={handleUpdateProfile}
         disabled={isSubmitting}
       >
@@ -98,6 +99,13 @@ const UserProfile: React.FC = () => {
           </View>
         );
       })()}
+
+      {/* Settings Section */}
+      <View style={{ marginTop: 24 }}>
+        <SettingsTab />
+      </View>
+    </ScrollView>
+  );
 
       <TouchableOpacity 
         style={[stylesBase.button, { backgroundColor: colors.error, marginTop: 24 }]} 
