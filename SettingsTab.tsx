@@ -1,30 +1,19 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import {
   View,
   StyleSheet,
-  Alert,
   ActivityIndicator,
-  TouchableOpacity,
   Text,
   ScrollView,
   Switch,
   Platform,
 } from 'react-native';
-import Share from 'react-native-share';
 import { useTheme } from './useTheme';
-import { useAuth } from './AuthProvider';
 import UserProfile from './UserProfile';
-import { useAppState } from './AppStateProvider';
-import { db } from './firebase';
-import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
-import { exportExpensesToPdf } from './pdfExport_clean';
 import { useBubbleSettings } from './useBubbleSettings';
 
 const SettingsTab = () => {
   const { colors } = useTheme();
-  const { deleteAccount, isLoading } = useAuth();
-  const { expenses, settlements } = useAppState();
-  const [isExporting, setIsExporting] = useState(false);
 
   // Floating bubble toggle
   const {
@@ -96,9 +85,6 @@ const SettingsTab = () => {
       height: 40,
     },
   });
-
-  const handleExportAndClear = useCallback(async () => {}, []);
-  const handleDeleteAccount = useCallback(() => {}, []);
 
   return (
     <ScrollView style={styles.tabContent} contentContainerStyle={styles.contentContainer}>

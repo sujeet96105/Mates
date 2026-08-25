@@ -5,41 +5,37 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Platform,
-  Switch,
   ScrollView,
 } from 'react-native';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
 import NativeAdCard from './components/ads/NativeAdCard';
 import { ANDROID_NATIVE_AD_UNIT_ID_PROFILE, IOS_NATIVE_AD_UNIT_ID_PROFILE } from './adConfig';
-import { useBubbleSettings } from './useBubbleSettings';
+import { useAppMessage } from './AppMessage';
 
 const UserProfile: React.FC = () => {
   const { user, updateProfile, error, deleteAccount, isLoading } = useAuth() as any;
   const { isDarkMode, colors } = useTheme();
+  const { showMessage } = useAppMessage();
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Floating bubble toggle
-  const {
-    bubbleEnabled,
-    onToggle: onBubbleToggle,
-    isLoading: bubbleLoading,
-  } = useBubbleSettings();
-
   const handleUpdateProfile = async () => {
     if (!displayName.trim()) {
-      Alert.alert('Error', 'Display name cannot be empty');
+      showMessage({
+        title: 'Display name required',
+        message: 'Enter a name before updating your profile.',
+        variant: 'warning',
+      });
       return;
     }
 
     setIsSubmitting(true);
     try {
       await updateProfile(displayName);
-      // Success alert is shown in the AuthProvider
+      // Success feedback is shown in the AuthProvider
     } catch (error) {
       // Error handling is done in the AuthProvider
     } finally {
@@ -92,31 +88,6 @@ const UserProfile: React.FC = () => {
           <Text style={[stylesBase.buttonText, { color: isDarkMode ? colors.surface : '#FFFFFF' }]}>Update Profile</Text>
         )}
       </TouchableOpacity>
-
-      {/* ── Features / Floating Bubble Section ───────────────────────────── */}
-      <Text style={[stylesBase.sectionHeader, { color: colors.textTertiary }]}>Features</Text>
-      <View style={[stylesBase.settingCard, { backgroundColor: colors.card, borderColor: colors.borderLight }]}>
-        <View style={stylesBase.settingRow}>
-          <View style={stylesBase.settingTextBlock}>
-            <Text style={[stylesBase.settingTitle, { color: colors.text }]}>💬 Floating Quick-Add Bubble</Text>
-            <Text style={[stylesBase.settingDescription, { color: colors.textSecondary }]}>
-              Add expenses instantly over other apps.
-              {Platform.OS === 'android' ? '\nRequires "Display over other apps" permission.' : ''}
-            </Text>
-          </View>
-          {bubbleLoading ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Switch
-              value={bubbleEnabled}
-              onValueChange={onBubbleToggle}
-              trackColor={{ false: colors.border, true: colors.primaryLight }}
-              thumbColor={bubbleEnabled ? colors.primary : colors.surface}
-              ios_backgroundColor={colors.border}
-            />
-          )}
-        </View>
-      </View>
 
       {/* Native Ad Card (production unit) */}
       {(() => {

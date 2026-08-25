@@ -7,7 +7,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Modal,
   ScrollView,
@@ -32,6 +31,8 @@ import UserProfile from './UserProfile';
 import { shouldRequestStoragePermission, requestStoragePermissionInApp } from './pdfExport_clean';
 import notifee, { EventType } from '@notifee/react-native';
 import Share from 'react-native-share';
+import { AppMessageProvider, useAppMessage } from './AppMessage';
+import ErrorBoundary from './ErrorBoundary';
 // Custom Logout SVG icon using provided path data
 const LogoutSvg: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = '#FFFFFF' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -105,25 +106,37 @@ export default function App() {
   const backgroundColor = isDark ? '#0F172A' : '#FFFFFF';
 
   return (
-    <GestureHandlerRootView style={rootStyles.flex}>
-      <SafeAreaProvider>
-        <StatusBar
-          translucent
-          backgroundColor="transparent"
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-        />
-        <SafeAreaView
-          style={[rootStyles.container, { backgroundColor }]}
-          edges={['top']}
-        >
-          <AuthProvider>
-            <AppStateProvider>
-              <AppWithAuth />
-            </AppStateProvider>
-          </AuthProvider>
-        </SafeAreaView>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={rootStyles.flex}>
+        <SafeAreaProvider>
+          <StatusBar
+            translucent
+            backgroundColor="transparent"
+            barStyle={isDark ? 'light-content' : 'dark-content'}
+          />
+          <SafeAreaView
+            style={[rootStyles.container, { backgroundColor }]}
+            edges={['top']}
+          >
+            <ErrorBoundary>
+              <AppMessageProvider>
+                <ErrorBoundary>
+                  <AuthProvider>
+                    <ErrorBoundary>
+                      <AppStateProvider>
+                        <ErrorBoundary>
+                          <AppWithAuth />
+                        </ErrorBoundary>
+                      </AppStateProvider>
+                    </ErrorBoundary>
+                  </AuthProvider>
+                </ErrorBoundary>
+              </AppMessageProvider>
+            </ErrorBoundary>
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 
@@ -171,6 +184,7 @@ function MainAppContent() {
   // Use our centralized theme hook
   const { isDarkMode, colors } = useTheme();
   const { user, logout } = useAuth();
+  const { confirm, showMessage } = useAppMessage();
   const insets = useSafeAreaInsets();
   // State variables (from context)
   const {
@@ -795,14 +809,16 @@ function MainAppContent() {
 
   // Render the main app content
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: async () => await logout(), style: 'destructive' }
-      ]
-    );
+    const shouldLogout = await confirm({
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      confirmLabel: 'Logout',
+      destructive: true,
+    });
+
+    if (shouldLogout) {
+      await logout();
+    }
   };
 
   return (
@@ -1000,16 +1016,28 @@ function MainAppContent() {
                     // Validate that the date is a valid date (not just matching the pattern)
                     const dateObj = new Date(tempDateInput);
                     if (isNaN(dateObj.getTime())) {
-                      Alert.alert('Invalid Date', 'Please enter a valid date');
+                      showMessage({
+                        title: 'Invalid date',
+                        message: 'Please enter a valid date.',
+                        variant: 'warning',
+                      });
                       return;
                     }
                     
                     // Validate date range (start date should be before or equal to end date)
                     if (datePickerType === 'start' && new Date(tempDateInput) > new Date(dateRange.end)) {
-                      Alert.alert('Invalid Date Range', 'Start date cannot be after end date');
+                      showMessage({
+                        title: 'Invalid date range',
+                        message: 'Start date cannot be after the end date.',
+                        variant: 'warning',
+                      });
                       return;
                     } else if (datePickerType === 'end' && new Date(tempDateInput) < new Date(dateRange.start)) {
-                      Alert.alert('Invalid Date Range', 'End date cannot be before start date');
+                      showMessage({
+                        title: 'Invalid date range',
+                        message: 'End date cannot be before the start date.',
+                        variant: 'warning',
+                      });
                       return;
                     }
                     
@@ -1017,7 +1045,11 @@ function MainAppContent() {
                     setShowDatePicker(false);
                     setTempDateInput('');
                   } else {
-                    Alert.alert('Invalid Date', 'Please enter date in YYYY-MM-DD format');
+                    showMessage({
+                      title: 'Invalid date',
+                      message: 'Please enter the date in YYYY-MM-DD format.',
+                      variant: 'warning',
+                    });
                   }
                 }}>
                 <Text style={[styles.buttonText, styles.confirmButtonText]}>

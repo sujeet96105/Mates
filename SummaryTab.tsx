@@ -87,32 +87,32 @@ const SummaryTab = () => {
       showsVerticalScrollIndicator={true}
     >
       {Object.keys(summaryData).length > 0 ? (
-        Object.keys(summaryData).map((mate) => {
-          const isPositive = summaryData[mate].balance >= 0;
+        Object.keys(summaryData).map((friend) => {
+          const isPositive = summaryData[friend].balance >= 0;
           return (
-            <ModernCard key={mate} style={styles.summaryItem}>
+            <ModernCard key={friend} style={styles.summaryItem}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                 <Icons.User />
-                <Text style={[styles.summaryName, { marginLeft: 12, marginBottom: 0 }]}>{mate}</Text>
+                <Text style={[styles.summaryName, { marginLeft: 12, marginBottom: 0 }]}>{friend}</Text>
               </View>
-              
+
               <View style={styles.summaryDetails}>
                 <View style={styles.summaryRow}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Icons.Money />
                     <Text style={[styles.summaryLabel, { marginLeft: 8 }]}>Paid:</Text>
                   </View>
-                  <Text style={styles.summaryValue}>₹{summaryData[mate].paid.toFixed(2)}</Text>
+                  <Text style={styles.summaryValue}>₹{summaryData[friend].paid.toFixed(2)}</Text>
                 </View>
-                
+
                 <View style={styles.summaryRow}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={{ fontSize: 14 }}>💸</Text>
                     <Text style={[styles.summaryLabel, { marginLeft: 8 }]}>Owes:</Text>
                   </View>
-                  <Text style={styles.summaryValue}>₹{summaryData[mate].owes.toFixed(2)}</Text>
+                  <Text style={styles.summaryValue}>₹{summaryData[friend].owes.toFixed(2)}</Text>
                 </View>
-                
+
                 <View style={[
                   styles.balanceCard,
                   isPositive ? styles.positiveBalanceCard : styles.negativeBalanceCard
@@ -129,7 +129,7 @@ const SummaryTab = () => {
                         isPositive ? styles.positiveBalance : styles.negativeBalance,
                       ]}
                     >
-                      {isPositive ? '+' : ''}₹{summaryData[mate].balance.toFixed(2)}
+                      {isPositive ? '+' : ''}₹{summaryData[friend].balance.toFixed(2)}
                     </Text>
                   </View>
                   <Text style={{

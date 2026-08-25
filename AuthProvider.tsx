@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Alert } from 'react-native';
 import { User } from 'firebase/auth';
 import { registerUser, loginUser, signOut, resetPassword, subscribeToAuthChanges, updateUserProfile, deleteAccountAndData } from './firebase';
+import { useAppMessage } from './AppMessage';
 
 // Define the shape of our authentication context
 interface AuthContextType {
@@ -22,6 +22,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Provider component that wraps the app and makes auth object available to any child component
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { showMessage } = useAppMessage();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,10 +59,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setError(message);
       if (message.toLowerCase().includes('verify your email')) {
-        Alert.alert(
-          'Verify Your Email',
-          'We sent a verification link to your email. Please verify your address before signing in. Also check your Spam/Junk folder.'
-        );
+        showMessage({
+          title: 'Verify your email',
+          message: 'Use the link we sent before signing in. Check Spam or Junk if it is missing.',
+          variant: 'info',
+          durationMs: 4500,
+        });
       }
       return null;
     } finally {
@@ -75,12 +78,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       setError(null);
       await deleteAccountAndData();
-      Alert.alert('Account Deleted', 'Your account and all data have been deleted.');
+      showMessage({
+        title: 'Account deleted',
+        message: 'Your account and data have been removed.',
+        variant: 'success',
+      });
       return true;
     } catch (error: any) {
       const message = error?.message || 'Failed to delete account. You may need to sign in again.';
       setError(message);
-      Alert.alert('Deletion Failed', message);
+      showMessage({
+        title: 'Deletion failed',
+        message,
+        variant: 'error',
+        durationMs: 4500,
+      });
       return false;
     } finally {
       setIsLoading(false);
@@ -94,10 +106,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(null);
       const user = await registerUser(email, password, displayName);
       // If we get here, registration was successful and verification email was sent
-      Alert.alert(
-        'Verification Email Sent',
-        'Please check your inbox for a verification link to activate your account. If you do not see it, check your Spam/Junk folder.'
-      );
+      showMessage({
+        title: 'Verification email sent',
+        message: 'Check your inbox for the activation link. Spam or Junk is worth a quick look too.',
+        variant: 'success',
+        durationMs: 5000,
+      });
       return user;
     } catch (error: any) {
       const code: string | undefined = error?.code;
@@ -106,10 +120,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Check if account was created but verification email failed
       if (message.includes('Account created successfully')) {
         // Account was created, but verification email failed
-        Alert.alert(
-          'Account Created',
-          message + ' You can try signing in to resend the verification email.'
-        );
+        showMessage({
+          title: 'Account created',
+          message: `${message} You can try signing in to resend the verification email.`,
+          variant: 'warning',
+          durationMs: 5000,
+        });
         setError(null); // Don't show this as an error since account was created
         return null;
       }
@@ -150,7 +166,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       setError(null);
       await resetPassword(email);
-      Alert.alert('Password Reset', 'Check your email for password reset instructions');
+      showMessage({
+        title: 'Password reset sent',
+        message: 'Check your email for reset instructions.',
+        variant: 'success',
+      });
       return true;
     } catch (error: any) {
       const code: string | undefined = error?.code;
@@ -173,7 +193,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       setError(null);
       const updatedUser = await updateUserProfile(displayName, photoURL);
-      Alert.alert('Profile Updated', 'Your profile has been updated successfully');
+      showMessage({
+        title: 'Profile updated',
+        message: 'Your changes were saved.',
+        variant: 'success',
+      });
       return updatedUser;
     } catch (error: any) {
       setError(error.message || 'Failed to update profile');

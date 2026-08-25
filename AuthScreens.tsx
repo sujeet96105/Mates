@@ -9,25 +9,30 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   SafeAreaView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
 import BillBuddyLogo from './MatesLogo';
+import { useAppMessage } from './AppMessage';
 
 // Login Screen Component
 export const LoginScreen: React.FC<{ onForgotPassword: () => void }> = ({ onForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading, error, setError } = useAuth();
+  const { login, isLoading, error } = useAuth();
   const { colors, isDarkMode } = useTheme();
+  const { showMessage } = useAppMessage();
   const insets = useSafeAreaInsets();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Missing Information', 'Please enter both email and password');
+      showMessage({
+        title: 'Missing information',
+        message: 'Please enter both email and password.',
+        variant: 'warning',
+      });
       return;
     }
     await login(email, password);
@@ -105,18 +110,27 @@ export const RegisterScreen: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const { register, isLoading, error, setError } = useAuth();
+  const { register, isLoading, error } = useAuth();
   const { colors, isDarkMode } = useTheme();
+  const { showMessage } = useAppMessage();
   const insets = useSafeAreaInsets();
 
   const handleRegister = async () => {
     if (!email || !password || !confirmPassword || !displayName) {
-      Alert.alert('Missing Information', 'Please fill in all fields');
+      showMessage({
+        title: 'Missing information',
+        message: 'Please fill in all fields.',
+        variant: 'warning',
+      });
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Password Mismatch', 'Passwords do not match');
+      showMessage({
+        title: 'Password mismatch',
+        message: 'Passwords do not match.',
+        variant: 'warning',
+      });
       return;
     }
 
@@ -210,11 +224,16 @@ export const ForgotPasswordScreen: React.FC<{ onBack: () => void }> = ({ onBack 
   const [email, setEmail] = useState('');
   const { resetUserPassword, isLoading, error } = useAuth();
   const { colors, isDarkMode } = useTheme();
+  const { showMessage } = useAppMessage();
   const insets = useSafeAreaInsets();
 
   const handleResetPassword = async () => {
     if (!email) {
-      Alert.alert('Missing Information', 'Please enter your email');
+      showMessage({
+        title: 'Email required',
+        message: 'Please enter your email.',
+        variant: 'warning',
+      });
       return;
     }
     const success = await resetUserPassword(email);

@@ -6,11 +6,11 @@ import { ModernButton, ModernCard, ModernInput, Icons } from './ModernUI';
 
 const RoommatesTab = () => {
   const {
-    newRoommate,
-    setNewRoommate,
-    handleAddRoommate,
-    roommates,
-    handleRemoveRoommate,
+    newFriend,
+    setNewFriend,
+    handleAddFriend,
+    friends,
+    handleRemoveFriend,
     isLoading,
   } = useAppState();
 
@@ -93,20 +93,20 @@ const RoommatesTab = () => {
   return (
     <FlatList
       style={styles.tabContent}
-      data={roommates}
-      keyExtractor={(item, index) => index.toString()}
+      data={friends}
+      keyExtractor={(item, index) => `friend-${index}-${item}`}
       ListHeaderComponent={
         <ModernCard style={{ marginBottom: 20 }}>
           <Text style={styles.cardTitle}>👥 Add New Friend</Text>
           <ModernInput
-            value={newRoommate}
-            onChangeText={setNewRoommate}
+            value={newFriend}
+            onChangeText={setNewFriend}
             placeholder="Enter friend's name"
             leftIcon={<Icons.User />}
           />
           <ModernButton
             title="Add Friend"
-            onPress={handleAddRoommate}
+            onPress={handleAddFriend}
             variant="primary"
             fullWidth
             leftIcon={<Icons.Add />}
@@ -122,7 +122,7 @@ const RoommatesTab = () => {
           </View>
           <ModernButton
             title="Remove"
-            onPress={() => handleRemoveRoommate(item)}
+            onPress={() => handleRemoveFriend(item)}
             variant="error"
             size="small"
             leftIcon={<Icons.Remove />}

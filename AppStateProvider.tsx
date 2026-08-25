@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { Alert } from 'react-native';
 import { useAuth } from './AuthProvider';
 import { db } from './firebase';  // Import Firestore
 import {
@@ -18,6 +17,7 @@ import {
   QuerySnapshot,
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAppMessage } from './AppMessage';
 
 // Default categories if none are set
 // Remove this declaration since DEFAULT_CATEGORIES is already declared below
@@ -142,6 +142,7 @@ const AppStateContext = createContext<AppStateContextType | undefined>(undefined
 export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Get the current user from AuthProvider
   const { user } = useAuth();
+  const { confirm, showMessage } = useAppMessage();
   
   // All state and handlers from App.tsx go here
   const [activeTab, setActiveTab] = useState('expenses');
@@ -407,7 +408,11 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       } catch (error) {
         console.error('Failed to load data:', error);
-        Alert.alert('Error', 'Failed to load your data. Please try again.');
+        showMessage({
+          title: 'Could not load data',
+          message: 'Please try again in a moment.',
+          variant: 'error',
+        });
       } finally {
         setIsLoading(false);
       }
@@ -553,7 +558,11 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const handleAddExpense = useCallback(async () => {
     if (!newExpense.description || newExpense.amount <= 0 || !newExpense.paidBy || !user) {
-      Alert.alert('Missing Information', 'Please fill in all required fields');
+      showMessage({
+        title: 'Missing information',
+        message: 'Please fill in all required expense fields.',
+        variant: 'warning',
+      });
       return;
     }
     
@@ -572,7 +581,11 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
       if (!sid) {
-        Alert.alert('Session Required', 'Please create or select a session before adding expenses.');
+        showMessage({
+          title: 'Session required',
+          message: 'Create or select a session before adding expenses.',
+          variant: 'warning',
+        });
         return;
       }
       // Create a new expense document in Firestore
@@ -598,9 +611,13 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNewExpense({ description: '', amount: 0, paidBy: '', splitWith: [], date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString(), category: 'Groceries' });
     } catch (error) {
       console.error('Error adding expense:', error);
-      Alert.alert('Error', 'Failed to add expense. Please try again.');
+      showMessage({
+        title: 'Expense not added',
+        message: 'Please try again.',
+        variant: 'error',
+      });
     }
-  }, [activeSessionId, insertSessionInternal, newExpense, sessions, user]);
+  }, [activeSessionId, insertSessionInternal, newExpense, sessions, showMessage, user]);
 
   const insertSession = useCallback(async (sessionName: string, sessionType: string): Promise<string | null> => {
     if (!user) return null;
@@ -653,17 +670,29 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNewCategoryName('');
       setShowCategoryModal(false);
     } else if (categories.includes(newCategoryName.trim())) {
-      Alert.alert('Duplicate Category', 'This category already exists');
+      showMessage({
+        title: 'Duplicate category',
+        message: 'This category already exists.',
+        variant: 'warning',
+      });
     }
-  }, [categories, newCategoryName]);
+  }, [categories, newCategoryName, showMessage]);
 
   const handleAddFriend = useCallback(async () => {
     if (!newFriend.trim()) {
-      Alert.alert('Missing Information', 'Please enter a friend name');
+      showMessage({
+        title: 'Friend name required',
+        message: 'Please enter a friend name.',
+        variant: 'warning',
+      });
       return;
     }
     if (friends.includes(newFriend.trim())) {
-      Alert.alert('Duplicate Friend', 'This friend already exists');
+      showMessage({
+        title: 'Duplicate friend',
+        message: 'This friend already exists.',
+        variant: 'warning',
+      });
       return;
     }
     const updatedFriends = [...friends, newFriend.trim()];
@@ -678,7 +707,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch (error) {
       console.warn('Failed to persist friend add:', error);
     }
-  }, [activeSessionId, friends, newFriend, user]);
+  }, [activeSessionId, friends, newFriend, showMessage, user]);
 
   // Backward compatibility alias
   const handleAddRoommate = handleAddFriend;
@@ -689,13 +718,22 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Find the expense in our local state first
     const expenseToDelete = expenses.find(expense => expense.id === id);
     if (!expenseToDelete) {
-      Alert.alert('Error', 'Could not find the expense to delete.');
+      showMessage({
+        title: 'Expense not found',
+        message: 'Could not find the expense to delete.',
+        variant: 'error',
+      });
       return;
     }
     
-    Alert.alert('Confirm Delete', 'Are you sure you want to delete this expense?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', onPress: async () => {
+    confirm({
+      title: 'Delete expense?',
+      message: 'This expense will be removed from your history.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    }).then(async (shouldDelete) => {
+      if (!shouldDelete) return;
+
         try {
           if (expenseToDelete.firestoreId) {
             // If we have the Firestore ID, delete directly
@@ -721,18 +759,42 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setExpenses(updatedExpenses);
         } catch (error) {
           console.error('Error removing expense:', error);
-          Alert.alert('Error', 'Failed to remove expense. Please try again.');
+          showMessage({
+            title: 'Delete failed',
+            message: 'Failed to remove expense. Please try again.',
+            variant: 'error',
+          });
         }
-      }, style: 'destructive' },
-    ]);
-  }, [expenses, user]);
+    });
+  }, [confirm, expenses, showMessage, user]);
 
   const handleRemoveFriend = useCallback((mate: string) => {
-    Alert.alert('Confirm Delete', 'Are you sure you want to remove this friend? This will affect expense calculations.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', onPress: async () => { const updatedFriends = friends.filter(friend => friend !== mate); setFriends(updatedFriends); try { if (user && activeSessionId) { const sessionDocRef = doc(db!, 'users', user.uid, 'sessions', activeSessionId); await setDoc(sessionDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true }); await AsyncStorage.setItem(`mates:user:${user.uid}:session:${activeSessionId}:friends`, JSON.stringify(updatedFriends)); } } catch (error) { console.warn('Failed to persist friend removal:', error); } }, style: 'destructive' },
-    ]);
-  }, [activeSessionId, friends, user]);
+    confirm({
+      title: 'Remove friend?',
+      message: 'This will affect expense calculations.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    }).then(async (shouldRemove) => {
+      if (!shouldRemove) return;
+
+      const updatedFriends = friends.filter(friend => friend !== mate);
+      setFriends(updatedFriends);
+      try {
+        if (user && activeSessionId) {
+          const sessionDocRef = doc(db!, 'users', user.uid, 'sessions', activeSessionId);
+          await setDoc(sessionDocRef, { roommates: updatedFriends, updatedAt: new Date() }, { merge: true });
+          await AsyncStorage.setItem(`mates:user:${user.uid}:session:${activeSessionId}:friends`, JSON.stringify(updatedFriends));
+        }
+      } catch (error) {
+        console.warn('Failed to persist friend removal:', error);
+        showMessage({
+          title: 'Friend removed locally',
+          message: 'Sync failed. We will try again when data refreshes.',
+          variant: 'warning',
+        });
+      }
+    });
+  }, [activeSessionId, confirm, friends, showMessage, user]);
 
   // Backward compatibility alias
   const handleRemoveRoommate = handleRemoveFriend;

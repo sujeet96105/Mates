@@ -1,11 +1,12 @@
 import React, { memo, useRef, useState, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator, Alert, Modal, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator, Modal, Dimensions } from 'react-native';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useAppState } from './AppStateProvider';
 import { useTheme } from './useTheme';
 import { ModernButton, ModernCard, ModernInput, Icons } from './ModernUI';
 import { exportExpensesToPdf } from './pdfExport_clean';
- 
+import { ExpenseItemSkeleton } from './LoadingSkeleton';
+
 import FilterExpander from './FilterExpander';
 import Share from 'react-native-share';
 import { openPdfUri } from './src/native/PdfSaver';
@@ -13,6 +14,7 @@ import { notifyPdfSaved } from './notifications';
 import { db } from './firebase';
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
+import { useAppMessage } from './AppMessage';
 
 type ExpensesTabProps = {
   tabScrollSimultaneousRef?: any;
@@ -32,13 +34,20 @@ const getExpenseSortTime = (expense: any) => {
 };
 
 const getExpenseKey = (item: any) => {
+  // Priority 1: Use Firestore ID (guaranteed unique)
   if (item.firestoreId) {
     return item.firestoreId;
   }
+
+  // Priority 2: Use numeric ID with prefix to ensure string uniqueness
   if (item.id) {
-    return String(item.id);
+    return `expense-${item.id}`;
   }
-  return `${item.date}-${item.time}-${item.description}-${item.amount}`;
+
+  // Priority 3: Create a more robust composite key with timestamp
+  // Include createdAt or fallback to a hash-like key to prevent collisions
+  const timestamp = item.createdAt || new Date(`${item.date} ${item.time}`).getTime() || Date.now();
+  return `${item.date}-${item.time}-${item.description}-${item.amount}-${item.paidBy}-${timestamp}`;
 };
 
 const AnimatedExpenseView = Animated.createAnimatedComponent(View) as React.ComponentType<any>;
@@ -81,7 +90,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     openDatePicker,
     newExpense,
     setNewExpense,
-    roommates,
+    friends,
     handleSplitWithChange,
     handleAddExpense,
     getFilteredExpenses,
@@ -99,6 +108,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
 
   // Use our custom theme hook for consistent theming
   const { isDarkMode, colors } = useTheme();
+  const { confirm, showMessage } = useAppMessage();
   const deviceWidth = Dimensions.get('window').width;
   const columns = deviceWidth >= 380 ? 3 : 2;
 
@@ -358,7 +368,11 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
   const handleExport = useCallback(async () => {
     const allExpenses = expenses; // export full history
     if (!allExpenses || allExpenses.length === 0) {
-      Alert.alert('Nothing to Export', 'No expenses found to export.');
+      showMessage({
+        title: 'Nothing to export',
+        message: 'No expenses found to export.',
+        variant: 'info',
+      });
       return;
     }
 
@@ -366,90 +380,121 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     try {
       const { success, filePath, error } = await exportExpensesToPdf(allExpenses as any, settlements as any);
       if (!success) {
-        Alert.alert('Export Failed', error || 'Could not create the PDF.');
+        showMessage({
+          title: 'Export failed',
+          message: error || 'Could not create the PDF.',
+          variant: 'error',
+        });
         return;
       }
       try { await notifyPdfSaved(filePath); } catch {}
-      Alert.alert(
-        'Exported',
-        `PDF saved${filePath ? ` to\n${filePath}` : ''}.`,
-        [
-          { text: 'OK' },
-          { text: 'Open', onPress: async () => {
-              if (!filePath) return;
-              const isContent = filePath.startsWith('content://');
-              if (isContent) {
-                try {
-                  await openPdfUri(filePath);
-                } catch (e: any) {
-                  Alert.alert('Open failed', 'No app available to open PDF or permission was denied. Please install a PDF viewer.');
-                }
-              } else {
-                const url = `file://${filePath}`;
-                try {
-                  await Share.open({ url, type: 'application/pdf', showAppsToView: true });
-                } catch {
-                  try { await import('react-native').then(m => m.Linking.openURL(url)); } catch {
-                    Alert.alert('Open failed', 'Could not open the PDF with any handler.');
-                  }
-                }
-              }
+      showMessage({
+        title: 'PDF exported',
+        message: filePath ? `Saved to ${filePath}` : 'Your PDF is ready.',
+        variant: 'success',
+        durationMs: 6000,
+        actionLabel: filePath ? 'Open' : undefined,
+        onAction: async () => {
+          if (!filePath) return;
+          const isContent = filePath.startsWith('content://');
+          if (isContent) {
+            try {
+              await openPdfUri(filePath);
+            } catch {
+              showMessage({
+                title: 'Open failed',
+                message: 'No PDF viewer was available or permission was denied.',
+                variant: 'error',
+              });
             }
-          },
-        ]
-      );
+            return;
+          }
+
+          const url = `file://${filePath}`;
+          try {
+            await Share.open({ url, type: 'application/pdf', showAppsToView: true });
+          } catch {
+            try {
+              const { Linking } = await import('react-native');
+              await Linking.openURL(url);
+            } catch {
+              showMessage({
+                title: 'Open failed',
+                message: 'Could not open the PDF with any handler.',
+                variant: 'error',
+              });
+            }
+          }
+        },
+      });
     } finally {
       setIsExporting(false);
     }
-  }, [expenses, settlements]);
+  }, [expenses, settlements, showMessage]);
 
   const handleClear = useCallback(async () => {
     const allExpenses = expenses;
     if (!allExpenses || allExpenses.length === 0) {
-      Alert.alert('Nothing to Clear', 'No expenses found to clear.');
+      showMessage({
+        title: 'Nothing to clear',
+        message: 'No expenses found to clear.',
+        variant: 'info',
+      });
       return;
     }
 
-    Alert.alert(
-      'Clear All Expenses',
-      'This will delete all your expenses from Firestore. This action cannot be undone. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: async () => {
-          setIsClearing(true);
-          try {
-            const expensesRef = collection(db!, 'expenses');
-            const idsWithFirestore = (allExpenses as any[]).filter(e => e.firestoreId).map(e => e.firestoreId as string);
-            if (idsWithFirestore.length > 0) {
-              const chunks: string[][] = [];
-              for (let i = 0; i < idsWithFirestore.length; i += 300) {
-                chunks.push(idsWithFirestore.slice(i, i + 300));
-              }
-              for (const chunk of chunks) {
-                await Promise.all(chunk.map(id => deleteDoc(doc(expensesRef, id))));
-              }
-            } else {
-              const numericIds = (allExpenses as any[]).map(e => e.id).filter(Boolean);
-              if (numericIds.length > 0) {
-                const sliceSize = 10;
-                for (let i = 0; i < numericIds.length; i += sliceSize) {
-                  const slice = numericIds.slice(i, i + sliceSize);
-                  const q = query(expensesRef, where('id', 'in', slice));
-                  const snap = await getDocs(q);
-                  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-                }
-              }
-            }
-            Alert.alert('Cleared', 'Expenses cleared.');
-          } catch (e) {
-            Alert.alert('Error', 'Failed to clear expenses.');
-          } finally {
-            setIsClearing(false);
+    const shouldClear = await confirm({
+      title: 'Clear all expenses?',
+      message: 'This will delete all your expenses from Firestore. This action cannot be undone.',
+      confirmLabel: 'Clear',
+      destructive: true,
+    });
+
+    if (!shouldClear) return;
+
+    setIsClearing(true);
+    try {
+      const expensesRef = collection(db!, 'expenses');
+      const idsWithFirestore = (allExpenses as any[])
+        .filter(e => e.firestoreId)
+        .map(e => e.firestoreId as string);
+
+      if (idsWithFirestore.length > 0) {
+        const chunks: string[][] = [];
+        for (let i = 0; i < idsWithFirestore.length; i += 300) {
+          chunks.push(idsWithFirestore.slice(i, i + 300));
+        }
+        for (const chunk of chunks) {
+          await Promise.all(chunk.map(id => deleteDoc(doc(expensesRef, id))));
+        }
+      } else {
+        const numericIds = (allExpenses as any[]).map(e => e.id).filter(Boolean);
+        if (numericIds.length > 0) {
+          const sliceSize = 10;
+          for (let i = 0; i < numericIds.length; i += sliceSize) {
+            const slice = numericIds.slice(i, i + sliceSize);
+            const q = query(expensesRef, where('id', 'in', slice));
+            const snap = await getDocs(q);
+            await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
           }
-        } }
-      ]
-    );
-  }, [expenses]);
+        }
+      }
+
+      showMessage({
+        title: 'Expenses cleared',
+        message: 'Your expense history is now empty.',
+        variant: 'success',
+      });
+    } catch {
+      showMessage({
+        title: 'Clear failed',
+        message: 'Failed to clear expenses.',
+        variant: 'error',
+      });
+    } finally {
+      setIsClearing(false);
+    }
+  }, [confirm, expenses, showMessage]);
 
   const visibleExpenses = useMemo(() => {
     const filtered = getFilteredExpenses();
@@ -477,11 +522,14 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
 
   if (isLoading) {
     return (
-      <View style={[styles.tabContent, { flex: 1, justifyContent: 'center', alignItems: 'center' }] }>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ color: colors.text, marginTop: 16 }}>
-          Loading your data...
-        </Text>
+      <View style={[styles.tabContent, { flex: 1 }]}>
+        <View style={styles.filterContainer}>
+          <Text style={styles.filterTitle}>Loading...</Text>
+        </View>
+        <ExpenseItemSkeleton />
+        <ExpenseItemSkeleton />
+        <ExpenseItemSkeleton />
+        <ExpenseItemSkeleton />
       </View>
     );
   }
@@ -549,24 +597,29 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                             <Text style={styles.pickerItemText}>{s.sessionName} ({s.sessionType})</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
-                            onPress={() => {
-                              Alert.alert(
-                                'Delete Session',
-                                'This will delete the session and all its expenses. Continue?',
-                                [
-                                  { text: 'Cancel', style: 'cancel' },
-                                  { text: 'Delete', style: 'destructive', onPress: async () => {
-                                    if (isDeletingSessionId) return;
-                                    try {
-                                      setIsDeletingSessionId(s.sessionId);
-                                      const ok = await deleteSession(s.sessionId);
-                                      if (!ok) Alert.alert('Failed', 'Could not delete session.');
-                                    } finally {
-                                      setIsDeletingSessionId(null);
-                                    }
-                                  } }
-                                ]
-                              );
+                            onPress={async () => {
+                              if (isDeletingSessionId) return;
+                              const shouldDelete = await confirm({
+                                title: 'Delete session?',
+                                message: 'This will delete the session and all its expenses.',
+                                confirmLabel: 'Delete',
+                                destructive: true,
+                              });
+                              if (!shouldDelete) return;
+
+                              try {
+                                setIsDeletingSessionId(s.sessionId);
+                                const ok = await deleteSession(s.sessionId);
+                                if (!ok) {
+                                  showMessage({
+                                    title: 'Delete failed',
+                                    message: 'Could not delete session.',
+                                    variant: 'error',
+                                  });
+                                }
+                              } finally {
+                                setIsDeletingSessionId(null);
+                              }
                             }}
                             disabled={isDeletingSessionId === s.sessionId}
                           >
@@ -602,7 +655,11 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                       if (isCreatingSession) return;
                       const name = newSessionName.trim();
                       if (!name) {
-                        Alert.alert('Name required', 'Please enter a session name.');
+                        showMessage({
+                          title: 'Name required',
+                          message: 'Please enter a session name.',
+                          variant: 'warning',
+                        });
                         return;
                       }
                       try {
@@ -613,7 +670,11 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                           setNewSessionName('');
                           setNewSessionType('Personal');
                         } else {
-                          Alert.alert('Failed', 'Could not create session. Please try again.');
+                          showMessage({
+                            title: 'Session not created',
+                            message: 'Could not create session. Please try again.',
+                            variant: 'error',
+                          });
                         }
                       } finally {
                         setIsCreatingSession(false);
@@ -646,23 +707,23 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
             />
             <Text style={styles.label}>Paid By:</Text>
             <View style={styles.selectContainer}>
-              {roommates.map((mate) => (
+              {friends.map((friend) => (
                 <TouchableOpacity
-                  key={mate}
+                  key={friend}
                   style={[
                     styles.selectItem,
-                    newExpense.paidBy === mate && styles.selectedItem,
+                    newExpense.paidBy === friend && styles.selectedItem,
                     { width: columns === 3 ? '32%' : '48%' },
                   ]}
-                  onPress={() => setNewExpense({ ...newExpense, paidBy: mate })}
+                  onPress={() => setNewExpense({ ...newExpense, paidBy: friend })}
                 >
                   <Text
                     style={[
                       styles.selectItemText,
-                      newExpense.paidBy === mate && styles.selectedItemText,
+                      newExpense.paidBy === friend && styles.selectedItemText,
                     ]}
                   >
-                    {mate}
+                    {friend}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -673,43 +734,43 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
               <TouchableOpacity
                 style={[
                   styles.selectItem,
-                  roommates.length > 0 && roommates.every((m) => newExpense.splitWith.includes(m)) && styles.selectedItem,
+                  friends.length > 0 && friends.every((f) => newExpense.splitWith.includes(f)) && styles.selectedItem,
                   { width: columns === 3 ? '32%' : '48%' },
                 ]}
                 onPress={() => {
-                  const allSelected = roommates.length > 0 && roommates.every((m) => newExpense.splitWith.includes(m));
+                  const allSelected = friends.length > 0 && friends.every((f) => newExpense.splitWith.includes(f));
                   setNewExpense({
                     ...newExpense,
-                    splitWith: allSelected ? [] : [...roommates],
+                    splitWith: allSelected ? [] : [...friends],
                   });
                 }}
               >
                 <Text
                   style={[
                     styles.selectItemText,
-                    roommates.length > 0 && roommates.every((m) => newExpense.splitWith.includes(m)) && styles.selectedItemText,
+                    friends.length > 0 && friends.every((f) => newExpense.splitWith.includes(f)) && styles.selectedItemText,
                   ]}
                 >
                   Select All
                 </Text>
               </TouchableOpacity>
-              {roommates.map((mate) => (
+              {friends.map((friend) => (
                 <TouchableOpacity
-                  key={mate}
+                  key={friend}
                   style={[
                     styles.selectItem,
-                    newExpense.splitWith.includes(mate) && styles.selectedItem,
+                    newExpense.splitWith.includes(friend) && styles.selectedItem,
                     { width: columns === 3 ? '32%' : '48%' },
                   ]}
-                  onPress={() => handleSplitWithChange(mate)}
+                  onPress={() => handleSplitWithChange(friend)}
                 >
                   <Text
                     style={[
                       styles.selectItemText,
-                      newExpense.splitWith.includes(mate) && styles.selectedItemText,
+                      newExpense.splitWith.includes(friend) && styles.selectedItemText,
                     ]}
                   >
-                    {mate}
+                    {friend}
                   </Text>
                 </TouchableOpacity>
               ))}
