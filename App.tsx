@@ -191,7 +191,7 @@ function MainAppContent() {
   const { width } = useWindowDimensions();
   const isTablet = width > 768;
   const deviceWidth = width;
-  const tabOrder: Array<'expenses' | 'roommates' | 'summary' | 'financialInsights'> = ['expenses', 'roommates', 'summary', 'financialInsights'];
+  const tabOrder: Array<'expenses' | 'roommates' | 'summary' | 'financialInsights' | 'settings'> = ['expenses', 'roommates', 'summary', 'financialInsights', 'settings'];
 
   // Sync scroll position when activeTab changes programmatically
   useEffect(() => {
@@ -857,6 +857,11 @@ function MainAppContent() {
               isActive={activeTab === 'financialInsights'}
               onPress={() => handleTabChange('financialInsights')}
             />
+            <ModernTab
+              title="Settings"
+              isActive={activeTab === 'settings'}
+              onPress={() => handleTabChange('settings')}
+            />
           </View>
         ) : (
           <ScrollView
@@ -883,6 +888,11 @@ function MainAppContent() {
               title="Insights"
               isActive={activeTab === 'financialInsights'}
               onPress={() => handleTabChange('financialInsights')}
+            />
+            <ModernTab
+              title="Settings"
+              isActive={activeTab === 'settings'}
+              onPress={() => handleTabChange('settings')}
             />
           </ScrollView>
         )}
@@ -915,6 +925,9 @@ function MainAppContent() {
         </View>
         <View style={{ width: deviceWidth, flex: 1 }}>
           <FinancialInsightsTab />
+        </View>
+        <View style={{ width: deviceWidth, flex: 1 }}>
+          <SettingsTab />
         </View>
       </GHScrollView>
       {/* AdMob banner below tabs */}

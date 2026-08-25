@@ -9,6 +9,7 @@ import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import com.billbuddy.app.bubble.FloatingBubblePackage
 import com.billbuddy.app.pdf.PdfSaverPackage
 
 class MainApplication : Application(), ReactApplication {
@@ -20,6 +21,7 @@ class MainApplication : Application(), ReactApplication {
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
               add(PdfSaverPackage())
+              add(FloatingBubblePackage())
             }
 
         override fun getJSMainModuleName(): String = "index"

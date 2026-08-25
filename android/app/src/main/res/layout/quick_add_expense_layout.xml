@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Clean, centered quick-add expense overlay dialog -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/quickAddRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/quick_add_background"
+    android:padding="20dp"
+    android:elevation="16dp">
+
+    <!-- Header row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Quick Add Expense"
+            android:textColor="#F1F5F9"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnCloseQuickAdd"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="✕"
+            android:textColor="#94A3B8"
+            android:textSize="18sp"
+            android:background="@android:color/transparent"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Description -->
+            <EditText
+                android:id="@+id/etDescription"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:hint="Description (e.g. Groceries)"
+                android:textColorHint="#64748B"
+                android:textColor="#F1F5F9"
+                android:textSize="15sp"
+                android:background="@null"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:inputType="textCapSentences"
+                android:imeOptions="actionNext"
+                style="@android:style/Widget.EditText" />
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="12dp" />
+
+            <!-- Amount -->
+            <EditText
+                android:id="@+id/etAmount"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:hint="Amount (₹)"
+                android:textColorHint="#64748B"
+                android:textColor="#F1F5F9"
+                android:textSize="15sp"
+                android:background="@null"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:inputType="numberDecimal"
+                android:imeOptions="actionDone" />
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="14dp" />
+
+            <!-- Paid By section -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Paid By:"
+                android:textColor="#94A3B8"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:layout_marginBottom="14dp">
+
+                <LinearLayout
+                    android:id="@+id/paidByChipsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical" />
+            </HorizontalScrollView>
+
+            <!-- Split With section -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Split With:"
+                android:textColor="#94A3B8"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:layout_marginBottom="14dp">
+
+                <LinearLayout
+                    android:id="@+id/splitWithChipsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical" />
+            </HorizontalScrollView>
+
+            <!-- Category section -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Category:"
+                android:textColor="#94A3B8"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:layout_marginBottom="18dp">
+
+                <LinearLayout
+                    android:id="@+id/categoryChipsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical" />
+            </HorizontalScrollView>
+
+            <!-- Add button -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="end">
+
+                <TextView
+                    android:id="@+id/btnSaveExpense"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:gravity="center"
+                    android:text="Add Expense"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="24dp"
+                    android:background="@drawable/btn_primary_background"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
+
+            <!-- Status message -->
+            <TextView
+                android:id="@+id/tvStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="#10B981"
+                android:textSize="13sp"
+                android:gravity="center"
+                android:layout_marginTop="10dp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

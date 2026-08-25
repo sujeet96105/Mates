@@ -452,7 +452,15 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
   }, [expenses]);
 
   const visibleExpenses = useMemo(() => {
-    return [...getFilteredExpenses()].sort((a, b) => getExpenseSortTime(b) - getExpenseSortTime(a));
+    const filtered = getFilteredExpenses();
+    const seen = new Set<string>();
+    const unique = filtered.filter(item => {
+      const key = getExpenseKey(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return unique.sort((a, b) => getExpenseSortTime(b) - getExpenseSortTime(a));
   }, [getFilteredExpenses]);
 
   const activeSessionName = useMemo(() => {

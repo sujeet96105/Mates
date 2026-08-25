@@ -1,4 +1,4 @@
- <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
 	xmlns:tools="http://schemas.android.com/tools"
 	package="com.billbuddy.app">
 
@@ -12,17 +12,23 @@
     </queries>
 
 
-    <!-- Essential permissions only -->
+    <!-- Essential permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
-    
+
+    <!-- Floating bubble overlay permission (SYSTEM_ALERT_WINDOW) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Foreground service — required for the floating bubble service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <!-- Remove unnecessary permissions from dependencies -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" tools:node="remove" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
     <uses-permission android:name="android.permission.VIBRATE" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_WLAN_STATE" tools:node="remove" />
@@ -60,5 +66,14 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+
+      <!-- Floating Quick-Add Bubble foreground service -->
+      <service
+        android:name=".bubble.FloatingBubbleService"
+        android:foregroundServiceType="specialUse"
+        android:exported="false"
+        android:stopWithTask="false" />
+
     </application>
 </manifest>
+

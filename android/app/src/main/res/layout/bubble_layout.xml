@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Floating bubble icon — 56 × 56 dp draggable circle using Bill Buddy app logo -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bubbleRoot"
+    android:layout_width="56dp"
+    android:layout_height="56dp"
+    android:background="@drawable/bubble_background"
+    android:padding="3dp"
+    android:elevation="8dp">
+
+    <!-- Bill Buddy App Icon -->
+    <ImageView
+        android:id="@+id/bubbleIcon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:src="@mipmap/ic_launcher_round"
+        android:scaleType="fitCenter" />
+
+    <!-- Small "+" badge at top right -->
+    <TextView
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_gravity="top|end"
+        android:background="@drawable/bubble_background"
+        android:gravity="center"
+        android:text="+"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:elevation="4dp" />
+
+</FrameLayout>
