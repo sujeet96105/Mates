@@ -43,6 +43,7 @@ class FloatingBubbleService : Service() {
     private lateinit var windowManager: WindowManager
     private var bubbleView: View? = null
     private var quickAddView: View? = null
+    private var backdropView: View? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
 
     // ── Screen dimensions ─────────────────────────────────────────────────
@@ -95,6 +96,7 @@ class FloatingBubbleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
         val displayMetrics = resources.displayMetrics
@@ -114,9 +116,11 @@ class FloatingBubbleService : Service() {
         handler.removeCallbacksAndMessages(null)
         safeRemoveView(bubbleView)
         safeRemoveView(quickAddView)
+        safeRemoveView(backdropView)
         safeRemoveView(dismissView)
         bubbleView    = null
         quickAddView  = null
+        backdropView  = null
         dismissView   = null
     }
 
@@ -275,15 +279,37 @@ class FloatingBubbleService : Service() {
     }
 
     private fun hideBubbleTemporarily() {
+        // Stop any ongoing animations and callbacks
+        handler.removeCallbacksAndMessages(null)
+        bubbleView?.animate()?.cancel()
+        quickAddView?.animate()?.cancel()
+        dismissView?.animate()?.cancel()
+
         // Notify React Native JS so the Settings toggle automatically switches to OFF
         FloatingBubbleModule.instance?.notifyBubbleDismissed()
 
-        bubbleView?.animate()?.alpha(0f)?.setDuration(180)?.withEndAction {
-            safeRemoveView(bubbleView)
-            safeRemoveView(quickAddView)
-            safeRemoveView(dismissView)
-            stopSelf()
-        }?.start()
+        // Smooth fade out animation
+        bubbleView?.apply {
+            // Disable touch events during animation
+            isClickable = false
+            isFocusable = false
+
+            animate()
+                .alpha(0f)
+                .setDuration(250)
+                .withEndAction {
+                    // Clean up all views
+                    safeRemoveView(bubbleView)
+                    safeRemoveView(quickAddView)
+                    safeRemoveView(backdropView)
+                    safeRemoveView(dismissView)
+
+                    // Stop service after cleanup
+                    stopSelf()
+                }
+                .start()
+        }
+
         Toast.makeText(this, "Bubble closed", Toast.LENGTH_SHORT).show()
     }
 
@@ -294,6 +320,13 @@ class FloatingBubbleService : Service() {
     @SuppressLint("InflateParams")
     private fun openQuickAddForm() {
         hideDismissZone()
+
+        // Hide the bubble when modal opens
+        bubbleView?.visibility = View.GONE
+
+        // Add semi-transparent backdrop
+        showBackdrop()
+
         val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.quick_add_expense_layout, null)
         quickAddView = view
@@ -477,6 +510,56 @@ class FloatingBubbleService : Service() {
     private fun closeQuickAddForm() {
         val view = quickAddView ?: return
         quickAddView = null
+
+        // Fade out modal and backdrop simultaneously
+        view.animate()?.alpha(0f)?.setDuration(200)?.withEndAction {
+            safeRemoveView(view)
+        }?.start()
+
+        // Hide backdrop with same timing
+        hideBackdrop()
+
+        // Show bubble after a brief delay to avoid flicker
+        handler.postDelayed({
+            bubbleView?.visibility = View.VISIBLE
+            bubbleView?.alpha = 1f
+        }, 150)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Backdrop for modal
+    // ─────────────────────────────────────────────────────────────────────
+
+    @SuppressLint("InflateParams")
+    private fun showBackdrop() {
+        if (backdropView != null) return
+
+        val backdrop = View(this).apply {
+            setBackgroundColor(0x80000000.toInt()) // Semi-transparent black (50% opacity)
+            alpha = 0f
+        }
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            overlayType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = 0
+        }
+
+        backdropView = backdrop
+        windowManager.addView(backdrop, params)
+        backdrop.animate().alpha(1f).setDuration(200).start()
+    }
+
+    private fun hideBackdrop() {
+        val view = backdropView ?: return
+        backdropView = null
         view.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
             safeRemoveView(view)
         }?.start()
@@ -516,17 +599,17 @@ class FloatingBubbleService : Service() {
             return
         }
 
+        val module = FloatingBubbleModule.instance
+        if (module == null) {
+            showStatus(formView, "App is closed. Please open Bill Buddy.", isError = true)
+            return
+        }
+
         showStatus(formView, "Saving expense...", isError = false)
 
         val now     = Date()
         val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-
-        val module = FloatingBubbleModule.instance
-        if (module == null) {
-            showStatus(formView, "App is closed. Please open Mates.", isError = true)
-            return
-        }
 
         val expenseMap = com.facebook.react.bridge.Arguments.createMap().apply {
             putString("description", description)
@@ -589,7 +672,7 @@ class FloatingBubbleService : Service() {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, NOTIF_CHANNEL_ID)
                 .setContentTitle("Quick-add bubble is active")
-                .setContentText("Tap to open Mates")
+                .setContentText("Tap to open Bill Buddy")
                 .setSmallIcon(android.R.drawable.ic_input_add)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
@@ -598,7 +681,7 @@ class FloatingBubbleService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
                 .setContentTitle("Quick-add bubble is active")
-                .setContentText("Tap to open Mates")
+                .setContentText("Tap to open Bill Buddy")
                 .setSmallIcon(android.R.drawable.ic_input_add)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)

@@ -10,17 +10,17 @@ import {
 } from 'react-native';
 import { useTheme } from './useTheme';
 import UserProfile from './UserProfile';
-import { useBubbleSettings } from './useBubbleSettings';
+// import { useBubbleSettings } from './useBubbleSettings';
 
 const SettingsTab = () => {
   const { colors } = useTheme();
 
-  // Floating bubble toggle
-  const {
-    bubbleEnabled,
-    onToggle: onBubbleToggle,
-    isLoading: bubbleLoading,
-  } = useBubbleSettings();
+  // Floating bubble toggle (temporarily disabled for release)
+  // const {
+  //   bubbleEnabled,
+  //   onToggle: onBubbleToggle,
+  //   isLoading: bubbleLoading,
+  // } = useBubbleSettings();
 
   const styles = StyleSheet.create({
     tabContent: {
@@ -91,10 +91,10 @@ const SettingsTab = () => {
       {/* Profile section */}
       <UserProfile />
 
-      {/* ── Features ───────────────────────────────────────────────────── */}
+      {/* ── Features (temporarily disabled for release) ─────────────────── */}
+      {/*
       <Text style={styles.sectionHeader}>Features</Text>
 
-      {/* Floating bubble toggle */}
       <View style={styles.settingCard}>
         <View style={styles.settingRow}>
           <View style={styles.settingTextBlock}>
@@ -119,6 +119,7 @@ const SettingsTab = () => {
           )}
         </View>
       </View>
+      */}
     </ScrollView>
   );
 };

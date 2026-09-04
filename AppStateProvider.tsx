@@ -19,9 +19,6 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppMessage } from './AppMessage';
 
-// Default categories if none are set
-// Remove this declaration since DEFAULT_CATEGORIES is already declared below
-
 // Define interfaces/types (copy from App.tsx as needed)
 interface Expense {
   id?: number;
@@ -120,6 +117,7 @@ interface AppStateContextType {
   newCategoryName: string;
   setNewCategoryName: React.Dispatch<React.SetStateAction<string>>;
   getFilteredExpenses: () => Expense[];
+  isAddingExpense: boolean;
   handleAddExpense: () => void;
   handleRemoveExpense: (id?: number) => void;
   handleSplitWithChange: (friend: string) => void;
@@ -151,6 +149,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Handle tab selection to redirect settlements and statistics to financialInsights
   const handleTabChange = useCallback((tab: string) => {
     // If user tries to access the old tabs, redirect to the new combined tab
+    // If user tries to access the old tabs, redirect to the new combined tab
     if (tab === 'settlements' || tab === 'statistics') {
       setActiveTab('financialInsights');
     } else {
@@ -158,6 +157,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, []);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [newExpense, setNewExpense] = useState<Expense>({
     description: '',
     amount: 0,
@@ -213,17 +213,19 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Load data and subscribe to realtime expenses when user changes
   useEffect(() => {
+    let isMounted = true;
     let unsubscribeExpenses: (() => void) | undefined;
     let unsubscribeUserDoc: (() => void) | undefined;
     let unsubscribeSessions: (() => void) | undefined;
     let unsubscribeActiveSessionDoc: (() => void) | undefined;
+
     const loadData = async () => {
       if (!user) {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
         return;
       }
       
-      setIsLoading(true);
+      if (isMounted) setIsLoading(true);
       try {
         // Try local cache first for fast startup
         let cachedFriends: string[] | undefined;
@@ -231,7 +233,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         try {
           const cacheKey = `mates:user:${user.uid}:profile`;
           const cached = await AsyncStorage.getItem(cacheKey);
-          if (cached) {
+          if (cached && isMounted) {
             const parsed = JSON.parse(cached);
             if (Array.isArray(parsed.roommates)) {
               cachedFriends = parsed.roommates;
@@ -247,12 +249,16 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           console.warn('[Cache] Failed to load from AsyncStorage', e);
         }
 
+        if (!isMounted) return;
+
         // Get user document reference
         const userDocRef = doc(db!, 'users', user.uid);
         console.log('[Firestore] Fetching user document...');
         const userDoc = await getDoc(userDocRef);
         console.log('[Firestore] User document fetched:', userDoc.exists() ? 'exists' : 'not found');
         
+        if (!isMounted) return;
+
         if (userDoc.exists()) {
           // User exists, load their data and subscribe for realtime updates
           const userData = userDoc.data();
@@ -268,7 +274,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             return true;
           };
 
-          unsubscribeUserDoc = onSnapshot(userDocRef, (docSnapshot) => {
+          const unsubUser = onSnapshot(userDocRef, (docSnapshot) => {
+            if (!isMounted) return;
             const data = docSnapshot.data();
             if (data) {
               const nextCategories = Array.isArray(data.categories) ? data.categories : undefined;
@@ -284,18 +291,23 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }, (err) => {
             console.warn('[Firestore] User doc listener error:', err);
           });
+          if (isMounted) unsubscribeUserDoc = unsubUser;
+          else unsubUser();
 
           // Load active session from storage
           try {
             const savedActive = await AsyncStorage.getItem(`mates:user:${user.uid}:activeSessionId`);
-            if (savedActive) {
+            if (savedActive && isMounted && !activeSessionId) {
               setActiveSessionId(savedActive);
             }
           } catch {}
 
+          if (!isMounted) return;
+
           // Subscribe to sessions for this user
           const sessionsQueryRef = query(collection(db!, 'users', user.uid, 'sessions'));
-          unsubscribeSessions = onSnapshot(sessionsQueryRef, async (snapshot) => {
+          const unsubSessions = onSnapshot(sessionsQueryRef, async (snapshot) => {
+            if (!isMounted) return;
             const nextSessions: ExpenseSession[] = snapshot.docs.map(d => {
               const data = d.data() as any;
               return {
@@ -316,7 +328,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               } else {
                 // Create default session
                 const createdId = await insertSessionInternal('Personal Daily Expenses', 'Personal', user.uid);
-                if (createdId) {
+                if (createdId && isMounted) {
                   setActiveSessionId(createdId);
                   AsyncStorage.setItem(`mates:user:${user.uid}:activeSessionId`, createdId).catch(() => {});
                 }
@@ -325,11 +337,14 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }, (err) => {
             console.warn('[Firestore] Sessions listener error:', err);
           });
+          if (isMounted) unsubscribeSessions = unsubSessions;
+          else unsubSessions();
 
           // Subscribe to active session doc for session-scoped friends
           if (activeSessionId) {
             const activeSessionDocRef = doc(db!, 'users', user.uid, 'sessions', activeSessionId);
-            unsubscribeActiveSessionDoc = onSnapshot(activeSessionDocRef, async (snap) => {
+            const unsubActiveSession = onSnapshot(activeSessionDocRef, async (snap) => {
+              if (!isMounted) return;
               const data = snap.data();
               const nextRoommates = Array.isArray(data?.roommates) ? (data!.roommates as string[]) : [];
               setFriends(nextRoommates);
@@ -337,6 +352,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }, (err) => {
               console.warn('[Firestore] Active session doc listener error:', err);
             });
+            if (isMounted) unsubscribeActiveSessionDoc = unsubActiveSession;
+            else unsubActiveSession();
           }
 
           // Realtime expenses subscription scoped to active session
@@ -346,10 +363,12 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             ...(activeSessionId ? [where('sessionId', '==', activeSessionId)] as any : [])
           );
           console.log('[Firestore] Subscribing to expenses...');
-          unsubscribeExpenses = onSnapshot(expensesQuery, (snapshot: QuerySnapshot<DocumentData>) => {
-            const expensesData = snapshot.docs.map((docSnapshot: QueryDocumentSnapshot<DocumentData>) => {
+          const unsubExpenses = onSnapshot(expensesQuery, (snapshot: QuerySnapshot<DocumentData>) => {
+            if (!isMounted) return;
+            const seen = new Map<string, Expense>();
+            snapshot.docs.forEach((docSnapshot: QueryDocumentSnapshot<DocumentData>) => {
               const data = docSnapshot.data();
-              return {
+              const exp: Expense = {
                 ...data,
                 firestoreId: docSnapshot.id,
                 date: typeof data.date === 'object' && data.date?.toDate ? 
@@ -360,17 +379,26 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   ? data.createdAt 
                   : (data.date ? new Date(`${data.date}T00:00:00`).getTime() : Date.now())
               } as Expense;
+              const key = exp.firestoreId || (exp.id ? `id-${exp.id}` : `${exp.date}-${exp.time}-${exp.description}-${exp.amount}-${exp.paidBy}`);
+              if (!seen.has(key)) {
+                seen.set(key, exp);
+              }
             });
-            console.log('[Firestore] Realtime expenses update. Count =', snapshot.size);
+            const expensesData = Array.from(seen.values());
+            console.log('[Firestore] Realtime expenses update. Count =', expensesData.length);
             setExpenses(expensesData);
           }, (err: FirestoreError) => {
             console.warn('[Firestore] Expenses listener error:', err);
           });
+          if (isMounted) unsubscribeExpenses = unsubExpenses;
+          else unsubExpenses();
+
           // Initialize local state immediately as well (before first snapshot)
           const initialRoommates = Array.isArray(userData.roommates) ? userData.roommates : [];
           const initialCategories = Array.isArray(userData.categories) ? userData.categories : DEFAULT_CATEGORIES;
           setFriends(initialRoommates);
           setCategories(initialCategories);
+
           // Cache initial fetch
           AsyncStorage.setItem(`mates:user:${user.uid}:profile`, JSON.stringify({
             roommates: initialRoommates,
@@ -458,12 +486,24 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Removed auto-save effect to avoid feedback loops with onSnapshot updates.
   // Saving to Firestore is handled explicitly in action handlers (e.g., handleAddRoommate, confirmAddCategory).
 
+
   const summaryData = useMemo<SummaryData>(() => {
     const balances: { [key: string]: Balance } = {};
     friends.forEach((mate) => {
       balances[mate] = { paid: 0, owes: 0, balance: 0 };
     });
-    expenses.forEach((expense) => {
+
+    // Deduplicate expenses to ensure accurate calculations
+    const uniqueMap = new Map<string, Expense>();
+    expenses.forEach((e) => {
+      const key = e.firestoreId || (e.id ? `id-${e.id}` : `${e.date}-${e.time}-${e.description}-${e.amount}-${e.paidBy}`);
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, e);
+      }
+    });
+    const uniqueExpenses = Array.from(uniqueMap.values());
+
+    uniqueExpenses.forEach((expense) => {
       const payer = expense.paidBy;
       const amount = Number(expense.amount);
       const splitWith = expense.splitWith.length > 0 ? expense.splitWith : [...friends];
@@ -526,7 +566,17 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [friends, summaryData]);
 
   const getFilteredExpenses = useCallback(() => {
-    return expenses.filter(expense => {
+    // Deduplicate expenses before filtering
+    const uniqueMap = new Map<string, Expense>();
+    expenses.forEach((e) => {
+      const key = e.firestoreId || (e.id ? `id-${e.id}` : `${e.date}-${e.time}-${e.description}-${e.amount}-${e.paidBy}`);
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, e);
+      }
+    });
+    const uniqueExpenses = Array.from(uniqueMap.values());
+
+    return uniqueExpenses.filter(expense => {
       // Check if category matches
       let matchesCategory = true;
       if (categoryFilter !== 'All') {
@@ -557,6 +607,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [categories, categoryFilter, dateRange.end, dateRange.start, expenses]);
 
   const handleAddExpense = useCallback(async () => {
+    if (isAddingExpense) return;
+
     if (!newExpense.description || newExpense.amount <= 0 || !newExpense.paidBy || !user) {
       showMessage({
         title: 'Missing information',
@@ -566,6 +618,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
     
+    setIsAddingExpense(true);
     try {
       // Ensure we have a valid sessionId
       let sid: string | null = activeSessionId || null;
@@ -603,11 +656,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         createdAt: Date.now()
       };
       
-      // Save to Firestore
+      // Save to Firestore (the real-time onSnapshot listener automatically updates `expenses` without duplication)
       await setDoc(newExpenseRef, expenseToAdd);
       
-      // Update local state
-      setExpenses(prev => [...prev, expenseToAdd]);
+      // Reset form
       setNewExpense({ description: '', amount: 0, paidBy: '', splitWith: [], date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString(), category: 'Groceries' });
     } catch (error) {
       console.error('Error adding expense:', error);
@@ -616,8 +668,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         message: 'Please try again.',
         variant: 'error',
       });
+    } finally {
+      setIsAddingExpense(false);
     }
-  }, [activeSessionId, insertSessionInternal, newExpense, sessions, showMessage, user]);
+  }, [activeSessionId, insertSessionInternal, isAddingExpense, newExpense, sessions, showMessage, user]);
 
   const insertSession = useCallback(async (sessionName: string, sessionType: string): Promise<string | null> => {
     if (!user) return null;
@@ -826,7 +880,17 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const generateExpenseStats = useCallback(() => {
     const stats = { total: 0, byCategory: {} as { [key: string]: number }, highest: { amount: 0, description: '' }, averagePerRoommate: 0 };
     if (expenses.length === 0) return stats;
-    expenses.forEach(expense => {
+
+    const uniqueMap = new Map<string, Expense>();
+    expenses.forEach((e) => {
+      const key = e.firestoreId || (e.id ? `id-${e.id}` : `${e.date}-${e.time}-${e.description}-${e.amount}-${e.paidBy}`);
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, e);
+      }
+    });
+    const uniqueExpenses = Array.from(uniqueMap.values());
+
+    uniqueExpenses.forEach(expense => {
       const amount = Number(expense.amount);
       stats.total += amount;
       if (!stats.byCategory[expense.category]) {
@@ -886,6 +950,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     newCategoryName,
     setNewCategoryName,
     getFilteredExpenses,
+    isAddingExpense,
     handleAddExpense,
     handleRemoveExpense,
     handleSplitWithChange,
@@ -925,6 +990,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     handleSplitWithChange,
     handleTabChange,
     insertSession,
+    isAddingExpense,
     isLoading,
     newCategoryName,
     newExpense,

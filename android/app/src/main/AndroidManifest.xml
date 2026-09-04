@@ -18,12 +18,12 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
 
-    <!-- Floating bubble overlay permission (SYSTEM_ALERT_WINDOW) -->
+    <!-- Floating bubble overlay permission (SYSTEM_ALERT_WINDOW) - TEMPORARILY DISABLED FOR RELEASE -->
+    <!--
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
-    <!-- Foreground service — required for the floating bubble service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    -->
 
     <!-- Remove unnecessary permissions from dependencies -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
@@ -67,12 +67,14 @@
         </intent-filter>
       </activity>
 
-      <!-- Floating Quick-Add Bubble foreground service -->
+      <!-- Floating Quick-Add Bubble foreground service - TEMPORARILY DISABLED FOR RELEASE -->
+      <!--
       <service
         android:name=".bubble.FloatingBubbleService"
         android:foregroundServiceType="specialUse"
         android:exported="false"
         android:stopWithTask="false" />
+      -->
 
     </application>
 </manifest>

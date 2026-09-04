@@ -139,6 +139,16 @@ class FloatingBubbleModule(
         } catch (_: Exception) {}
     }
 
+    fun notifyExpenseSaved() {
+        try {
+            if (reactCtx.hasActiveReactInstance()) {
+                reactCtx
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                    .emit("ON_EXPENSE_SAVED_FROM_BUBBLE", null)
+            }
+        } catch (_: Exception) {}
+    }
+
     override fun onHostResume()  { /* no-op */ }
     override fun onHostPause()   { /* no-op */ }
     override fun onHostDestroy() { /* keep service alive on back/background */ }

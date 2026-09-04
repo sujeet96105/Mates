@@ -204,7 +204,7 @@ export function useBubbleSettings() {
     // Permission not yet granted — show rationale, then redirect
     Alert.alert(
       'Overlay Permission Needed',
-      'To show the floating bubble while you use other apps, Mates needs the "Display over other apps" permission.\n\nYou\'ll be taken to Android Settings to grant it.',
+      'To show the floating bubble while you use other apps, Bill Buddy needs the "Display over other apps" permission.\n\nYou\'ll be taken to Android Settings to grant it.',
       [
         {
           text: 'Not Now',

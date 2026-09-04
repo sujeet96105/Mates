@@ -8,13 +8,14 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
+  Switch,
 } from 'react-native';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './useTheme';
 import NativeAdCard from './components/ads/NativeAdCard';
 import { ANDROID_NATIVE_AD_UNIT_ID_PROFILE, IOS_NATIVE_AD_UNIT_ID_PROFILE } from './adConfig';
 import { useAppMessage } from './AppMessage';
-import SettingsTab from './SettingsTab';
+// import { useBubbleSettings } from './useBubbleSettings';
 
 const UserProfile: React.FC = () => {
   const { user, updateProfile, error, deleteAccount, isLoading } = useAuth() as any;
@@ -22,6 +23,13 @@ const UserProfile: React.FC = () => {
   const { showMessage } = useAppMessage();
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Floating bubble toggle (temporarily disabled for release)
+  // const {
+  //   bubbleEnabled,
+  //   onToggle: onBubbleToggle,
+  //   isLoading: bubbleLoading,
+  // } = useBubbleSettings();
 
   const handleUpdateProfile = async () => {
     if (!displayName.trim()) {
@@ -90,6 +98,36 @@ const UserProfile: React.FC = () => {
         )}
       </TouchableOpacity>
 
+      {/* Features Section (temporarily disabled for release) */}
+      {/*
+      <Text style={[stylesBase.sectionHeader, { color: colors.textTertiary }]}>Features</Text>
+
+      <View style={[stylesBase.settingCard, { backgroundColor: colors.card, borderColor: colors.borderLight }]}>
+        <View style={stylesBase.settingRow}>
+          <View style={stylesBase.settingTextBlock}>
+            <Text style={[stylesBase.settingTitle, { color: colors.text }]}>💬  Floating Quick-Add Bubble</Text>
+            <Text style={[stylesBase.settingDescription, { color: colors.textSecondary }]}>
+              Add expenses instantly without opening the app.
+              {Platform.OS === 'android'
+                ? '\nRequires "Display over other apps" permission.'
+                : ''}
+            </Text>
+          </View>
+          {bubbleLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Switch
+              value={bubbleEnabled}
+              onValueChange={onBubbleToggle}
+              trackColor={{ false: colors.border, true: colors.primaryLight }}
+              thumbColor={bubbleEnabled ? colors.primary : colors.surface}
+              ios_backgroundColor={colors.border}
+            />
+          )}
+        </View>
+      </View>
+      */}
+
       {/* Native Ad Card (production unit) */}
       {(() => {
         const adUnitIdProfile = Platform.select({ android: ANDROID_NATIVE_AD_UNIT_ID_PROFILE, ios: IOS_NATIVE_AD_UNIT_ID_PROFILE }) || ANDROID_NATIVE_AD_UNIT_ID_PROFILE;
@@ -100,15 +138,8 @@ const UserProfile: React.FC = () => {
         );
       })()}
 
-      {/* Settings Section */}
-      <View style={{ marginTop: 24 }}>
-        <SettingsTab />
-      </View>
-    </ScrollView>
-  );
-
-      <TouchableOpacity 
-        style={[stylesBase.button, { backgroundColor: colors.error, marginTop: 24 }]} 
+      <TouchableOpacity
+        style={[stylesBase.button, { backgroundColor: colors.error, marginTop: 24 }]}
         onPress={() => deleteAccount()}
         disabled={!!isLoading}
       >

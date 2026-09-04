@@ -92,6 +92,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
     setNewExpense,
     friends,
     handleSplitWithChange,
+    isAddingExpense,
     handleAddExpense,
     getFilteredExpenses,
     handleRemoveExpense,
@@ -828,8 +829,17 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ tabScrollSimultaneousRef }) =
                 }}
               />
             )}
-            <TouchableOpacity style={styles.addButton} onPress={handleAddExpense}>
-              <Text style={styles.addButtonText}>Add Expense</Text>
+            <TouchableOpacity 
+              style={[styles.addButton, isAddingExpense && { opacity: 0.6 }]} 
+              onPress={handleAddExpense}
+              disabled={isAddingExpense}
+              activeOpacity={0.8}
+            >
+              {isAddingExpense ? (
+                <ActivityIndicator color={colors.textOnPrimary || '#FFFFFF'} size="small" />
+              ) : (
+                <Text style={styles.addButtonText}>Add Expense</Text>
+              )}
             </TouchableOpacity>
           </View>
           {/* Actions near history */}
